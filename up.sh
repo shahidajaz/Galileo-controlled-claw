@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-[ -f .env ] || { cp .env.example .env; echo "created .env from .env.example — edit LLM_* / GALILEO_API_KEY as needed"; }
+[ -f .env ] || { cp .env.example .env; echo "created .env from .env.example, edit LLM_* / GALILEO_API_KEY as needed"; }
 
 gen() { openssl rand -hex "${1:-24}"; }
 setblank() {  # setblank KEY VALUE : fill KEY in .env only when it is blank/missing
@@ -23,7 +23,7 @@ PROFILES=()
 [ "${1:-}" = "--splunk" ] && PROFILES=(--profile splunk)
 [ "${WITH_SPLUNK:-}" = "1" ] && PROFILES=(--profile splunk)
 
-echo ">> building + starting (first run pulls + compiles OpenClaw from source — several minutes)"
+echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
 docker compose "${PROFILES[@]}" up -d --build
 
 # shellcheck disable=SC1091

@@ -76,7 +76,7 @@ docker compose exec openclaw tail -n 5 /root/galileo-fwd.log
 ## 6. Durability
 
 - Everything runs with `restart: unless-stopped`, so a reboot brings the whole
-  stack back — **including the OpenClaw gateway and both feeds** (they're baked
+  stack back, **including the OpenClaw gateway and both feeds** (they're baked
   into the image entrypoint, not started by hand).
 - Config + cacheTrace live on the image/volumes, so `docker compose restart`
   and full reboots are safe. `./down.sh -v` wipes data volumes.
@@ -86,6 +86,6 @@ docker compose exec openclaw tail -n 5 /root/galileo-fwd.log
 | Symptom | Fix |
 |---|---|
 | Agent errors calling the LLM | check `LLM_BASE_URL` is reachable from the container (`host.docker.internal` = the host) |
-| Every tool call blocked | Agent Control is unreachable and `GOVERNANCE_FAIL_CLOSED=true` — check the `server` container is healthy |
-| Galileo log shows `rejected>0` | spans lacked GenAI attributes — ensure you're on the shipped forwarder (it sends OpenInference spans) |
+| Every tool call blocked | Agent Control is unreachable and `GOVERNANCE_FAIL_CLOSED=true`, check the `server` container is healthy |
+| Galileo log shows `rejected>0` | spans lacked GenAI attributes, ensure you're on the shipped forwarder (it sends OpenInference spans) |
 | Splunk container won't start (arm64) | use `SPLUNK_HEC_URL` to point at an existing Splunk instead |

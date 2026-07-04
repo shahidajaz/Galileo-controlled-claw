@@ -10,7 +10,7 @@ name: openclaw-governed
 services:
   # --- Agent Control: the governor (stores policy + every decision) -----------
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     environment:
       POSTGRES_DB: agent_control
       POSTGRES_USER: agent_control
@@ -63,7 +63,7 @@ services:
       GOVERNANCE_FAIL_CLOSED: "${GOVERNANCE_FAIL_CLOSED:-true}"
       OPENCLAW_GATEWAY_PORT: "18789"
       GATEWAY_TOKEN: "${GATEWAY_TOKEN}"
-      # Galileo (optional — leave GALILEO_API_KEY blank to disable)
+      # Galileo (optional, leave GALILEO_API_KEY blank to disable)
       GALILEO_API_KEY: "${GALILEO_API_KEY:-}"
       GALILEO_PROJECT: "${GALILEO_PROJECT:-OpenClaw_Galileo}"
       GALILEO_LOG_STREAM: "${GALILEO_LOG_STREAM:-Stream_1}"
@@ -72,7 +72,7 @@ services:
 
   # --- Splunk (optional: `--profile splunk`) ----------------------------------
   splunk:
-    image: splunk/splunk:latest
+    image: splunk/splunk:9.4.13
     profiles: ["splunk"]
     environment:
       SPLUNK_START_ARGS: "--accept-license"

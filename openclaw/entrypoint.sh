@@ -12,7 +12,7 @@ if [ -n "${GALILEO_API_KEY:-}" ]; then
   echo "[entrypoint] Galileo forwarder ON (project=${GALILEO_PROJECT:-?} stream=${GALILEO_LOG_STREAM:-?})"
   ( while true; do node /opt/oc/galileo-forwarder.mjs >> /root/galileo-fwd.log 2>&1 || true; sleep 5; done ) &
 else
-  echo "[entrypoint] Galileo forwarder OFF (no GALILEO_API_KEY) — Agent Control + Splunk still active"
+  echo "[entrypoint] Galileo forwarder OFF (no GALILEO_API_KEY), Agent Control + Splunk still active"
 fi
 
 echo "[entrypoint] starting OpenClaw gateway on :${OPENCLAW_GATEWAY_PORT:-18789}"
