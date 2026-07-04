@@ -1,0 +1,8 @@
+# Tiny sidecar: reads Agent Control's Postgres and ships governance events to Splunk HEC.
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY splunk-forwarder.sh /opt/splunk-forwarder.sh
+RUN chmod +x /opt/splunk-forwarder.sh
+ENTRYPOINT ["/opt/splunk-forwarder.sh"]
