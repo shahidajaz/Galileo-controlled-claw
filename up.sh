@@ -19,6 +19,25 @@ setblank AC_ADMIN_KEY      "acadmin_$(gen)"
 setblank AC_SESSION_SECRET "$(gen 32)"
 setblank GATEWAY_TOKEN     "$(gen)"
 
+# Auto-pick free host ports so several governed stacks never collide (e.g. running
+# this next to the fleet). Uses python3 (already required by the portal); works on
+# Mac + Linux + WSL. Only when THIS stack is not already running, so a rebuild keeps ports.
+setkv() { local k="$1" v="$2"; if grep -qE "^${k}=" .env; then sed -i "s|^${k}=.*|${k}=${v}|" .env; else echo "${k}=${v}" >> .env; fi; }
+free_port() { local k="$1" def="$2" cur p; cur="$(grep -E "^${k}=" .env | cut -d= -f2)"; cur="${cur:-$def}"
+  p="$(python3 -c 'import socket,sys
+p=int(sys.argv[1])
+while True:
+    s=socket.socket()
+    try: s.bind(("127.0.0.1",p)); s.close(); print(p); break
+    except OSError: p+=1' "$cur")"
+  setkv "$k" "$p"; }
+if [ -z "$(docker compose -f compose.yml ps -q 2>/dev/null | head -1)" ]; then
+  free_port AC_PORT 8181
+  free_port OPENCLAW_GATEWAY_PORT 18789
+  grep -qE '^SPLUNK_PORT=' .env && free_port SPLUNK_PORT 8090
+  echo "   host ports: Agent Control=$(grep -E '^AC_PORT=' .env | cut -d= -f2), gateway=$(grep -E '^OPENCLAW_GATEWAY_PORT=' .env | cut -d= -f2)"
+fi
+
 # Compose profiles are auto-selected from .env so nobody has to memorize flags:
 #   --splunk (or WITH_SPLUNK=1)  -> also run the BUNDLED Splunk container (demo/offline)
 #   SPLUNK_HEC_URL set in .env    -> ship decisions to that (external) Splunk, forwarder only
