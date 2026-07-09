@@ -1,0 +1,250 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed OpenClaw</title>
+<style>
+:root{--bg:#0e1216;--panel:#171d24;--panel2:#1c232b;--line:#232b34;--line2:#2c3742;--ink:#dbe3ee;
+--hd:#9aa7b8;--mu:#6b7787;--mu2:#586474;--ac:#7f9cf5;--acbg:#1b2440;--g:#2fbf71;--am:#d9a13b;--rd:#ef7a72;
+--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+.app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:18px 0;position:sticky;top:0;height:100vh}
+.brand{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ac);padding:0 18px 16px}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav a{display:flex;align-items:center;gap:9px;padding:9px 18px;color:var(--mu);text-decoration:none;font-size:14px;border-left:2px solid transparent}
+.nav a:hover{color:var(--ink);background:#151d28}
+.nav a.on{color:var(--ink);background:var(--acbg);border-left-color:var(--ac);font-weight:600}
+.wrap{padding:30px 34px 80px;max-width:820px}
+h1{font-size:22px;margin:0 0 4px;font-weight:640;letter-spacing:-.01em}
+.sub{color:var(--mu);margin:0 0 22px;font-size:13.5px;max-width:62ch}
+h2{font-size:16px;margin:22px 0 8px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dot.up{background:var(--g)}.dot.down{background:var(--mu2)}.dot.warn{background:var(--am)}
+/* status */
+.stat{display:inline-block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 16px;margin:0 10px 10px 0;min-width:120px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}.stat span{color:var(--mu);font-size:12px}
+.svc{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line);font-size:13.5px}
+.svc .nm{flex:1}.svc .st{color:var(--mu);font-size:12px;font-family:var(--mono)}
+.gov-line{display:flex;align-items:center;gap:8px;color:var(--mu);font-size:12.5px;margin:0 0 16px}
+.btn{background:var(--ac);color:#0e1216;border:0;border-radius:8px;padding:9px 16px;font-weight:640}
+.btn:hover{filter:brightness(1.07)}.btn:disabled{opacity:.55;cursor:default}
+.btn.ghost{background:transparent;border:1px solid var(--line2);color:var(--ink);font-weight:500}
+.btn.sm{padding:6px 11px;font-size:13px}
+.foot{display:flex;gap:10px;margin-top:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:12px}
+.kv{display:flex;gap:12px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+.kv:first-child{border-top:0}.kv>span:first-child{color:var(--mu);min-width:120px;flex-shrink:0}
+.tag{font-size:11.5px;color:var(--mu);border:1px solid var(--line2);border-radius:6px;padding:1px 8px}
+.tag.deny{color:var(--rd);border-color:#7a3b38}.tag.steer{color:var(--am);border-color:#7a5f22}.tag.observe{color:var(--mu)}
+.ac{color:var(--ac);cursor:pointer;text-decoration:none}
+/* Connections cards (redesigned) */
+.cx-strip{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 16px;margin-bottom:14px}
+.cx-strip .lead{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu)}
+.cx-pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--hd)}
+.cx-note{color:var(--mu);font-size:12.5px;flex-basis:100%;margin-top:2px}
+.cx-sec{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--hd);margin:24px 0 3px}
+.cx-intro{color:var(--mu);font-size:13px;margin:0 0 12px;max-width:64ch}
+.cx-card{background:var(--panel);border:1px solid var(--line);border-radius:11px;margin-bottom:12px;overflow:hidden;transition:border-color .18s}
+.cx-card.open{border-color:var(--line2)}
+.cx-head{display:flex;align-items:center;gap:12px;padding:0 15px;height:56px;cursor:pointer;user-select:none}
+.cx-nm{font-size:15px;font-weight:600;flex:none}
+.cx-what{color:var(--mu);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.cx-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--hd);flex:none}
+.cx-body{padding:0 16px;max-height:0;opacity:0;transition:max-height .19s ease,opacity .19s,padding .19s}
+.cx-card.open .cx-body{max-height:560px;opacity:1;padding:4px 16px 16px}
+.cx-field{margin-bottom:12px}.cx-field label{display:block;font-size:13px;color:var(--hd);margin-bottom:5px}
+.cx-inrow{display:flex;gap:8px}
+input,select{font:inherit;font-size:13.5px;background:#0f151c;color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:9px 11px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--ac)}
+.cx-help{color:var(--mu);font-size:12px;margin-top:5px;line-height:1.45}
+.cx-keep{color:var(--mu);font-size:12px;margin-top:4px}.cx-cardnote{color:var(--mu);font-size:12.5px;margin:0 0 12px}
+.cx-eye{background:none;border:0;color:var(--mu);cursor:pointer;padding:0 8px;font-size:13px}
+.sw{position:relative;width:38px;height:22px;flex:none}.sw input{opacity:0;width:0;height:0;position:absolute}
+.tk{position:absolute;inset:0;background:#2b3540;border-radius:999px;transition:.16s}
+.tk:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#c3ccd8;border-radius:50%;transition:.16s}
+.sw input:checked+.tk{background:var(--ac)}.sw input:checked+.tk:before{transform:translateX(16px);background:#fff}
+/* chat */
+.chatlog{background:#0f151c;border:1px solid var(--line);border-radius:10px;padding:12px;height:46vh;overflow:auto;font-size:13.5px}
+.msg{margin-bottom:10px}.msg .who{font-family:var(--mono);font-size:11px;color:var(--mu)}
+.msg.u .who{color:var(--ac)}.msg pre{margin:3px 0 0;white-space:pre-wrap;font-family:var(--sans)}
+.log{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10px;height:38vh;overflow:auto;font-family:var(--mono);font-size:12px;white-space:pre-wrap}
+/* modal */
+.backdrop{position:fixed;inset:0;background:rgba(4,7,11,.6);z-index:9;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:22px;max-width:560px;width:100%}
+.modal h3{margin:0 0 4px}.mbtn{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.22s;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:11px 15px;font-size:13px;z-index:30}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--ac);border-radius:50%;display:inline-block;vertical-align:-2px;animation:sp .6s linear infinite;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style></head><body>
+<div class="app">
+  <div class="side"><div class="brand">Governed OpenClaw</div>
+    <div class="nav" id="nav"></div></div>
+  <div class="wrap" id="main"></div>
+</div>
+<div id="modalroot"></div><div class="toast" id="toast"></div>
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const S={view:'home',state:null};
+const NAV=[['home','Home'],['access','Connections'],['governance','Governance'],['chat','Chat']];
+const CHAT={msgs:[],busy:false};
+
+async function api(path,opts){const r=await fetch(path,opts);return r.json();}
+async function loadState(){S.state=await api('/api/state');render();}
+function go(v){S.view=v;render();}
+function toast(m){const t=$('#toast');t.textContent=m;t.className='toast show';clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3500);}
+
+function renderNav(){$('#nav').innerHTML=NAV.map(([k,l])=>`<a class="${S.view===k?'on':''}" onclick="go('${k}')">${l}</a>`).join('');}
+function render(){renderNav();const st=S.state;if(!st){$('#main').innerHTML='<p class="sub">Loading…</p>';return;}
+  if(S.view==='home')$('#main').innerHTML=homeView(st);
+  else if(S.view==='access')$('#main').innerHTML=accessView(st);
+  else if(S.view==='governance')$('#main').innerHTML=governanceView(st);
+  else if(S.view==='chat')$('#main').innerHTML=chatView(st);
+}
+
+/* ---------- Home ---------- */
+function homeView(st){
+  const svcs={postgres:'Governance database',server:'Agent Control (the governor)','llm-proxy':'LLM governance proxy',openclaw:'The agent'};
+  const up=Object.values(st.stack).every(Boolean);
+  const rows=Object.entries(svcs).map(([k,label])=>{const on=st.stack[k];
+    return `<div class="svc"><i class="dot ${on?'up':'down'}"></i><span class="nm">${label}</span><span class="st">${on?'running':'stopped'}</span></div>`;}).join('');
+  const g=st.gov;
+  return `<h1>Home</h1><p class="sub">One governed OpenClaw agent. ${up?'Running now.':'Not running.'} Governance is ${g.enabled?'ON':'OFF'}${g.fail_closed?', fail-closed':''}.</p>
+    <div>
+      <div class="stat"><b>${g.decisions??'—'}</b><span>decisions logged</span></div>
+      <div class="stat"><b>${g.blocked??'—'}</b><span>blocked</span></div>
+      <div class="stat"><b>${(st.controls||[]).length||'—'}</b><span>active controls</span></div>
+      <div class="stat"><b style="font-size:15px;font-weight:600">${esc(st.llm.model||'—')}</b><span>model</span></div>
+    </div>
+    <h2>The stack</h2><div class="card">${rows}</div>
+    <div class="foot">
+      ${up?`<button class="btn ghost" onclick="lifecycle('down','Stopping the stack…')">Stop</button>`
+          :`<button class="btn" onclick="lifecycle('up','Building + starting (first time is slow)…')">Start the stack</button>`}
+      <button class="btn ghost" onclick="lifecycle('up','Rebuilding + restarting…')">Rebuild</button>
+    </div>
+    <p class="sub" style="margin-top:12px">Agent Control policy UI (advanced): <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a></p>`;
+}
+async function lifecycle(which,title){await api('/api/'+which,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});applyOverlay(title);}
+
+/* ---------- Connections (redesigned) ---------- */
+function accessView(st){
+  const a=st.access;const v=(x)=>esc(x||'');
+  const REALMS=['','us0','us1','us2','eu0','eu1','au0','jp0'];
+  const realmOpts=REALMS.map(r=>`<option value="${r}" ${a.o11y.realm===r?'selected':''}>${r||'region'}</option>`).join('');
+  const chip=(on,creds)=>on?`<span class="cx-chip"><i class="dot up"></i>Active</span>`
+    :`<span class="cx-chip"><i class="dot down"></i>Off${creds?' &middot; <span class="mu">saved</span>':''}</span>`;
+  const txt=(id,label,ph,val,help)=>`<div class="cx-field"><label>${label}</label>
+     <input type="text" id="${id}" placeholder="${ph}" value="${v(val)}"><div class="cx-help">${help}</div></div>`;
+  const sec=(id,label,ph,val,help)=>`<div class="cx-field"><label>${label}</label>
+     <div class="cx-inrow"><input type="password" id="${id}" placeholder="${ph}" value="${v(val)}"><button type="button" class="cx-eye" onclick="cxEye(this)" title="Show">&#128065;</button></div>
+     <div class="cx-help">${help}</div></div>`;
+  const card=(id,name,what,on,creds,body)=>`<div class="cx-card ${on?'open':''}" id="cx_${id}">
+     <div class="cx-head" onclick="if(event.target.tagName!=='INPUT')cxOpen('${id}')">
+       <span class="cx-nm">${name}</span><span class="cx-what">${what}</span>
+       <span id="cxchip_${id}">${chip(on,creds)}</span>
+       <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" id="on_${id}" ${on?'checked':''} onchange="cxToggle('${id}',this.checked)"><span class="tk"></span></label>
+     </div>
+     <div class="cx-body">${body}<div class="cx-keep">Turned off later? Your credentials are kept, nothing is deleted.</div></div></div>`;
+  return `<h1>Connections</h1><p class="sub">Choose how people reach the agent and where its activity gets recorded. Governance is always on and is not configured here. Saving only restarts what you changed.</p>
+   <div class="cx-strip"><span class="lead">Always on</span>
+     <span class="cx-pill"><i class="dot up"></i>Chat (this portal)</span>
+     <span class="cx-pill"><i class="dot up"></i>Terminal</span>
+     <span class="cx-pill"><i class="dot up"></i>Governance gate</span>
+     <span class="cx-note">These are built in and cannot be turned off.</span></div>
+   <div class="cx-sec">Chat channels</div>
+   <p class="cx-intro">Extra places to talk to the agent, like your phone or your team's Slack. All optional.</p>
+   ${card('tg','Telegram','Talk to your agent from the Telegram app on your phone.',a.telegram.on,a.telegram.token,
+     sec('a_tg','Bot token','123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxx',a.telegram.token,'In Telegram, message @BotFather, send /newbot, and copy the token it replies with.')
+     +txt('a_tgid','Allowed Telegram IDs','123456789, 987654321',a.telegram.id,'Only these accounts can talk to the agent. Message @userinfobot in Telegram to see your ID. Separate several with commas.'))}
+   ${card('dc','Discord','Talk to your agent inside a Discord server.',a.discord.on,a.discord.token,
+     sec('a_dc','Bot token','MTAx...',a.discord.token,'Create an app at discord.com/developers, open the Bot tab, and copy its token. Then invite the bot to your server.'))}
+   ${card('sl','Slack','Talk to your agent in Slack channels and direct messages.',a.slack.on,a.slack.token,
+     `<div class="cx-cardnote">All three values come from one place: your app&rsquo;s page at api.slack.com/apps.</div>`
+     +sec('a_sl','Bot token','xoxb-...',a.slack.token,'Under OAuth &amp; Permissions, after installing the app to your workspace. Starts with xoxb-.')
+     +sec('a_sla','App token','xapp-...',a.slack.app,'Under Basic Information, App-Level Tokens. Create one with the connections:write scope. Starts with xapp-.')
+     +sec('a_sls','Signing secret','Paste the signing secret',a.slack.signing,'Under Basic Information, App Credentials. Lets the agent verify messages really came from Slack.'))}
+   <div class="cx-sec">Monitoring</div>
+   <p class="cx-intro">Optional dashboards that record what the agent does, useful for debugging and audits. The agent runs fine without them.</p>
+   ${card('gl','Galileo (AI quality)','Keeps a searchable record of every model call, so you can see what the agent was asked and how it answered.',a.galileo.on,a.galileo.key,
+     sec('a_gk','API key','Paste your Galileo API key',a.galileo.key,'In Galileo, open Settings, then API Keys, and create one.')
+     +txt('a_gp','Project name','OpenClaw_Governed',a.galileo.project,'The Galileo project where these records appear.'))}
+   ${card('o11y','Splunk Observability (health metrics)','Live dashboards for agent health: how busy it is and whether anything is failing.',a.o11y.on,a.o11y.token,
+     `<div class="cx-field"><label>Region</label><select id="a_or">${realmOpts}</select><div class="cx-help">Splunk calls this your realm. Find it in your web address: app.us1.signalfx.com means us1.</div></div>`
+     +sec('a_ot','Access token','Paste an ingest token',a.o11y.token,'In Splunk Observability: Settings, then Access Tokens. Use a token with ingest permission.'))}
+   ${card('sp','Splunk logs','Sends the agent\'s activity logs to your Splunk instance for searching and alerting.',a.splunk.on,a.splunk.url||a.splunk.token,
+     txt('a_su','Splunk log endpoint','https://your-splunk:8088/services/collector',a.splunk.url,'This is Splunk&rsquo;s HTTP Event Collector (HEC), its door for incoming logs. Ask whoever runs Splunk for this URL.')
+     +sec('a_st','Endpoint token','Paste the HEC token',a.splunk.token,'Created in Splunk under Settings, Data Inputs, HTTP Event Collector.'))}
+   <div class="foot"><button class="btn" onclick="saveAccess()">Save &amp; apply</button></div>`;
+}
+function cxToggle(id,on){const el=$('#cx_'+id);if(!el)return;el.classList.toggle('open',on);
+  const has=[...el.querySelectorAll('.cx-body input')].some(i=>(i.value||'').trim());
+  $('#cxchip_'+id).innerHTML=on?`<span class="cx-chip"><i class="dot up"></i>Active</span>`
+    :`<span class="cx-chip"><i class="dot down"></i>Off${has?' &middot; <span class="mu">saved</span>':''}</span>`;}
+function cxOpen(id){const el=$('#cx_'+id);if(!el)return;const s=el.querySelector('.sw input');s.checked=!s.checked;cxToggle(id,s.checked);}
+function cxEye(b){const i=b.previousElementSibling;i.type=i.type==='password'?'text':'password';b.title=i.type==='password'?'Show':'Hide';}
+async function saveAccess(){
+  const g=(id)=>($('#'+id)?.value||'').trim();const on=(id)=>!!($('#'+id)&&$('#'+id).checked);
+  await api('/api/access',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+    telegram:{on:on('on_tg'),token:g('a_tg'),id:g('a_tgid')},
+    discord:{on:on('on_dc'),token:g('a_dc')},
+    slack:{on:on('on_sl'),token:g('a_sl'),app:g('a_sla'),signing:g('a_sls')},
+    galileo:{on:on('on_gl'),key:g('a_gk'),project:g('a_gp')},
+    o11y:{on:on('on_o11y'),realm:g('a_or'),token:g('a_ot')},
+    splunk:{on:on('on_sp'),url:g('a_su'),token:g('a_st')}})});
+  applyOverlay('Applying your changes (only what changed restarts)…');
+}
+
+/* ---------- Governance ---------- */
+function governanceView(st){
+  const cs=st.controls;
+  const rows=cs===null?`<div class="mu" style="padding:8px 0">Agent Control is not reachable. Start the stack from Home.</div>`
+    :cs.length===0?`<div class="mu" style="padding:8px 0">No controls attached yet. They seed automatically when the stack starts.</div>`
+    :cs.map(c=>`<div class="svc"><i class="dot ${c.decision==='deny'?'up':c.decision==='steer'?'warn':'down'}"></i>
+       <span class="nm">${esc(c.name)}</span>
+       <span class="tag ${esc(c.decision)}">${esc(c.decision)}</span>
+       <span class="st">${esc(c.step)}</span></div>`).join('');
+  return `<h1>Governance</h1>
+    <p class="sub">Every tool call and model turn is checked against these rules before it runs. Fail-closed: if the governor is down, actions are blocked.</p>
+    <div class="gov-line"><i class="dot up"></i> Governance is always on. These rules are enforced by Agent Control on every action.</div>
+    <div class="stat"><b>${st.gov.decisions??'—'}</b><span>decisions logged</span></div>
+    <div class="stat"><b>${st.gov.blocked??'—'}</b><span>blocked</span></div>
+    <h2>Active controls</h2>
+    <div class="card">${rows}</div>
+    <p class="sub" style="margin-top:10px">Add, edit, or remove rules live in the Agent Control UI: <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a>. Changes apply immediately, no restart.</p>`;
+}
+
+/* ---------- Chat ---------- */
+function chatView(st){
+  const up=st.stack.openclaw;
+  const log=CHAT.msgs.map(m=>`<div class="msg ${m.role==='user'?'u':''}"><div class="who">${m.role==='user'?'you':'agent'}</div><pre>${esc(m.text)}</pre></div>`).join('')
+    ||'<div class="mu">Say hi to your agent. Every reply is governed.</div>';
+  return `<h1>Chat</h1><p class="sub">Talk to the agent (openclaw-agent:main). ${up?'':'<span style="color:var(--am)">The stack is not running. Start it from Home first.</span>'}</p>
+    <div class="chatlog" id="chatlog">${log}</div>
+    <div class="foot"><input id="chatin" placeholder="type a message…" ${CHAT.busy||!up?'disabled':''} onkeydown="if(event.key==='Enter')sendChat()" style="flex:1">
+      <button class="btn" onclick="sendChat()" ${CHAT.busy||!up?'disabled':''}>${CHAT.busy?'<span class=spin></span>…':'Send'}</button></div>`;
+}
+async function sendChat(){
+  const inp=$('#chatin');const msg=(inp.value||'').trim();if(!msg||CHAT.busy)return;
+  CHAT.msgs.push({role:'user',text:msg});CHAT.busy=true;render();
+  const r=await api('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg})});
+  CHAT.msgs.push({role:'agent',text:r.reply||'(no reply)'});CHAT.busy=false;render();
+  const l=$('#chatlog');if(l)l.scrollTop=l.scrollHeight;
+}
+
+/* ---------- apply overlay (streamed build log) ---------- */
+let _bn=0;
+function modal(html){$('#modalroot').innerHTML=`<div class="backdrop" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;}
+function closeModal(){$('#modalroot').innerHTML='';}
+function applyOverlay(title){_bn=0;
+  modal(`<h3>${esc(title)}</h3><pre class="log" id="buildlog">starting…</pre>
+   <div class="mbtn"><button class="btn" id="doneBtn" disabled onclick="closeModal();loadState()">Done</button></div>`);
+  pollApply();}
+async function pollApply(){const r=await api('/api/build/log?since='+_bn);_bn=r.n;
+  const lg=$('#buildlog');if(lg){for(const l of r.lines)lg.textContent+=(lg.textContent&&!lg.textContent.endsWith('\n')?'\n':'')+l;lg.scrollTop=lg.scrollHeight;}
+  if(r.running)setTimeout(pollApply,700);else{const b=$('#doneBtn');if(b)b.disabled=false;}}
+
+loadState();
+setInterval(()=>{if(S.view==='home'||S.view==='governance')loadState();},8000);
+</script></body></html>
