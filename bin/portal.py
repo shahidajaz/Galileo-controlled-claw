@@ -305,5 +305,14 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     ensure_env()
-    print(f"[portal] http://127.0.0.1:{PORT}")
-    ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+    srv = None
+    for p in range(PORT, PORT + 20):          # auto-fallback if the port is taken
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", p), H)
+            print(f"[portal] http://127.0.0.1:{p}")
+            break
+        except OSError:
+            continue
+    if srv is None:
+        raise SystemExit(f"[portal] no free port in {PORT}..{PORT + 19}")
+    srv.serve_forever()
