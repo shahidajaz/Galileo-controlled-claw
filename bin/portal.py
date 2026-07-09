@@ -309,7 +309,7 @@ if __name__ == "__main__":
     for p in range(PORT, PORT + 20):          # auto-fallback if the port is taken
         try:
             srv = ThreadingHTTPServer(("127.0.0.1", p), H)
-            print(f"[portal] http://127.0.0.1:{p}")
+            print(f"[portal] open  http://127.0.0.1:{p}", flush=True)
             break
         except OSError:
             continue
