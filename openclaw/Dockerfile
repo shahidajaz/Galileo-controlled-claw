@@ -21,8 +21,20 @@ RUN git clone --depth 1 --branch ${OPENCLAW_REF} https://github.com/openclaw/ope
 RUN git clone --depth 1 --branch ${PLUGIN_REF} https://github.com/agentcontrol/openclaw-plugin.git /root/plugin \
  && cd /root/plugin && npm ci
 
-COPY render-config.mjs galileo-forwarder.mjs entrypoint.sh /opt/oc/
+COPY openclaw/render-config.mjs openclaw/galileo-forwarder.mjs openclaw/cachetrace-splunk-forwarder.mjs openclaw/cachetrace-o11y-forwarder.mjs openclaw/entrypoint.sh /opt/oc/
 RUN chmod +x /opt/oc/entrypoint.sh
+
+# Agent operating guide: OpenClaw injects this workspace AGENTS.md into the system
+# prompt at session start (and re-injects its Session Startup / Red Lines sections
+# after compaction). This is what makes the agent reach for the webex_* tools.
+COPY openclaw/agent-workspace /root/agent-workspace
+# Helper subagent's own workspace (focused read-only role); the Manager delegates to it.
+COPY openclaw/agent-workspace-helper /root/agent-workspace-helper
+
+# Governed Webex tools plugin (baked in -> root-owned, passes OpenClaw's plugin
+# ownership check; loaded from source via jiti like the agent-control plugin).
+COPY webex /root/openclaw-webex
+RUN cd /root/openclaw-webex && npm install --omit=dev
 
 ENV OPENCLAW_GATEWAY_PORT=18789
 EXPOSE 18789

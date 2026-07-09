@@ -1,0 +1,12 @@
+{
+  "id": "openclaw-webex",
+  "name": "Webex",
+  "description": "Governed Webex tools: read spaces/messages/transcripts; send/book behind approval. BYO-per-user credentials.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean" }
+    }
+  }
+}

@@ -19,28 +19,27 @@ setblank AC_ADMIN_KEY      "acadmin_$(gen)"
 setblank AC_SESSION_SECRET "$(gen 32)"
 setblank GATEWAY_TOKEN     "$(gen)"
 
+# Compose profiles are auto-selected from .env so nobody has to memorize flags:
+#   --splunk (or WITH_SPLUNK=1)  -> also run the BUNDLED Splunk container (demo/offline)
+#   SPLUNK_HEC_URL set in .env    -> ship decisions to that (external) Splunk, forwarder only
+#   SPLUNK_O11Y_REALM set in .env -> ship metrics to Splunk Observability Cloud
 PROFILES=()
-[ "${1:-}" = "--splunk" ] && PROFILES=(--profile splunk)
-[ "${WITH_SPLUNK:-}" = "1" ] && PROFILES=(--profile splunk)
+if [ "${1:-}" = "--splunk" ] || [ "${WITH_SPLUNK:-}" = "1" ]; then
+  PROFILES+=(--profile splunk)
+elif grep -qE '^SPLUNK_HEC_URL=.+' .env; then
+  PROFILES+=(--profile splunk-hec)
+fi
+grep -qE '^SPLUNK_O11Y_REALM=.+' .env && PROFILES+=(--profile splunk-o11y)
 
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
+echo "   profiles: ${PROFILES[*]:-<none>}"
 docker compose "${PROFILES[@]}" up -d --build
 
-# shellcheck disable=SC1091
-set -a; . ./.env; set +a
-cat <<EOF
-
-============================================================
-  openclaw-governed is UP
-============================================================
-  Agent Control (governor UI)  http://localhost:${AC_PORT:-8181}
-      admin key:               ${AC_ADMIN_KEY}
-  OpenClaw gateway             http://localhost:${OPENCLAW_GATEWAY_PORT:-18789}
-$( [ -n "${GALILEO_API_KEY:-}" ] && echo "  Galileo feed                 ON  -> project ${GALILEO_PROJECT}" || echo "  Galileo feed                 off (set GALILEO_API_KEY in .env to enable)" )
-$( [ "${PROFILES[*]:-}" = "--profile splunk" ] && echo "  Splunk                       http://localhost:${SPLUNK_PORT:-8090}  (user: admin)" || echo "  Splunk                       not started (run ./up.sh --splunk)" )
-
-  Try it:   docker compose exec openclaw \\
-              bash -lc 'cd /root/ocsrc && node scripts/run-node.mjs agent --agent main -m "list the files in /root"'
-  Full usage + how a BLOCK looks:  see docs/USAGE.md
-============================================================
-EOF
+# Wait briefly for the governor to answer, then print the access card.
+printf ">> waiting for services"
+for _ in $(seq 1 30); do
+  curl -sf "http://127.0.0.1:$(grep -E '^AC_PORT=' .env | cut -d= -f2 || echo 8181)/health" >/dev/null 2>&1 && break
+  printf "."; sleep 2
+done
+echo
+./bin/access-card.sh

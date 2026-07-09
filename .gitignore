@@ -1,2 +1,12 @@
 .env
 *.log
+docker-compose.override.yml
+
+# Local-only: stashed secrets (e.g. Webex refresh token) and runtime settings
+.backups/
+**/webex.json
+
+# Dependencies + build artifacts (installed/generated at build time)
+node_modules/
+__pycache__/
+*.pyc

@@ -1,0 +1,9 @@
+# Tiny sidecar: reads Agent Control's Postgres and ships governance decisions
+# to Splunk Observability Cloud as SignalFx metrics.
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY o11y-forwarder.sh /opt/o11y-forwarder.sh
+RUN chmod +x /opt/o11y-forwarder.sh
+ENTRYPOINT ["/opt/o11y-forwarder.sh"]

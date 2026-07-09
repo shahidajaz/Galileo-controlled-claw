@@ -1,0 +1,10 @@
+{
+  "name": "openclaw-webex",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.mjs",
+  "description": "Governed Webex tools for OpenClaw (BYO-per-user).",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  }
+}

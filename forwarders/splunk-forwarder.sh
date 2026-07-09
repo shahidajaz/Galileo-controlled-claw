@@ -12,6 +12,9 @@ HEC="${SPLUNK_HEC_URL:-http://splunk:8088/services/collector/event}"
 TOKEN="${SPLUNK_HEC_TOKEN:?SPLUNK_HEC_TOKEN required}"
 INDEX="${SPLUNK_INDEX:-main}"
 STATE="${STATE_FILE:-/state/.fwd_last_ts}"
+# TLS verification ON by default; opt in to -k only for self-signed HECs.
+CURL_INSECURE=""
+[ "${SPLUNK_HEC_INSECURE:-false}" = "true" ] && CURL_INSECURE="-k"
 mkdir -p "$(dirname "$STATE")"
 
 export PGPASSWORD="$PGPASS"
@@ -29,7 +32,7 @@ while :; do
     n=0
     while IFS= read -r J; do
       [ -z "$J" ] && continue
-      curl -sk -o /dev/null -X POST "$HEC" -H "Authorization: Splunk $TOKEN" \
+      curl -s $CURL_INSECURE -o /dev/null -X POST "$HEC" -H "Authorization: Splunk $TOKEN" \
         -d "{\"sourcetype\":\"openclaw:agentcontrol\",\"source\":\"agent-control\",\"index\":\"$INDEX\",\"event\":$J}"
       n=$((n+1))
     done <<< "$ROWS"

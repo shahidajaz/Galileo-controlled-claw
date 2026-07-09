@@ -33,13 +33,15 @@ required except an (optional) Galileo API key.
 ## Quick start
 
 ```bash
-cp .env.example .env
-#   edit LLM_BASE_URL / LLM_MODEL   (point at your model)
-#   optionally paste GALILEO_API_KEY
-
-./up.sh            # OpenClaw + Agent Control (+ Galileo if key set)
-./up.sh --splunk   # ...and the bundled Splunk + log forwarder
+./setup.sh         # interactive: asks for your LLM, Galileo key, Splunk -> writes .env
+./up.sh            # OpenClaw + Agent Control (+ Galileo / Splunk if configured)
 ```
+
+`setup.sh` probes your LLM endpoint to list available models, generates all secrets,
+and offers to bring the stack up. Prefer to edit by hand instead? `cp .env.example .env`,
+set `LLM_BASE_URL` / `LLM_MODEL`, then `./up.sh`. Add `--splunk` for the bundled Splunk.
+
+To run the agent **ungoverned** for an A/B test: `GOVERNANCE_ENABLED=false ./up.sh`.
 
 `up.sh` generates all secrets on first run and prints your access URLs + admin key.
 
@@ -64,6 +66,30 @@ common edits:
 - `GALILEO_API_KEY`, blank disables the Galileo feed entirely
 - `GOVERNANCE_FAIL_CLOSED=true`, block tool calls if the governor is down
 - `SPLUNK_HEC_URL`, point the forwarder at an **existing** Splunk instead of the bundled one
+
+## Governance surfaces, policies, decisions
+
+Agent Control exposes three surfaces and (in v8.2.0) three decisions. This repo wires:
+
+| Surface | How | Decisions used |
+|---|---|---|
+| **Tool calls** | the native `agent-control-openclaw-plugin` (in-process) | `deny` |
+| **LLM calls (reasoning)** | the `llm-proxy` service (OpenClaw talks to it instead of the model; it evaluates every prompt via Agent Control `/api/v1/evaluation`, fail-closed, and records the decision for the audit trail) | `deny`, `steer` |
+| Agent workflow | *not wired* — the vendor plugin only hooks tools; the workflow surface needs `@control()` decorators inside OpenClaw itself | — |
+
+The demo policy set (auto-attached by `ac-setup`): block a demo token, dangerous shell
+commands, and secret/key exfiltration (tool `deny`); block prompt-injection (LLM `deny`);
+steer away from PII in the prompt (LLM `steer`). Edit them in `ac-setup/setup.py`.
+
+**Honest ceilings of the open-source build:** the self-hosted Agent Control server ships
+only the built-in evaluators `regex / list / json / sql`. The Luna / NeMo / Bedrock
+detectors from Galileo's marketing are commercial/add-on and **not** in this build, so
+regex is the strongest native detector here. Luna-2 **scoring** and **Signals** run in the
+Galileo cloud on the traces the forwarder sends (enable out-of-the-box metrics per log
+stream in the Galileo UI); they are observability, they do not block.
+
+Toggle governance per run: `GOVERNANCE_ENABLED=false ./up.sh` (raw), `LLM_GOVERNANCE=false`
+(keep tool governance, drop the LLM layer).
 
 ## Pinned versions
 

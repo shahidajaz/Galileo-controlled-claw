@@ -20,52 +20,103 @@ const textOf = (c) => typeof c === "string" ? c
 function loadState() { try { return JSON.parse(fs.readFileSync(STATE, "utf8")); } catch { return { seen: [] }; } }
 function saveState(s) { fs.writeFileSync(STATE, JSON.stringify(s)); }
 
-// One OpenInference LLM span per completed turn (last user prompt -> final assistant reply).
-function turnToSpan(turn) {
-  const msgs = turn.messages;
-  let ai = -1;
-  for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].role === "assistant") { ai = i; break; } }
-  if (ai < 0) return null;
-  let ui = -1;
-  for (let i = ai - 1; i >= 0; i--) { if (msgs[i].role === "user") { ui = i; break; } }
-  const prompt = ui >= 0 ? textOf(msgs[ui].content) : "";
-  const completion = textOf(msgs[ai].content);
-  if (!completion.trim()) return null;
-  const a = msgs[ai];
-  const u = a.usage || {};
-  const pt = u.inputTokens ?? u.promptTokens ?? u.prompt_tokens ?? 0;
-  const ct = u.outputTokens ?? u.completionTokens ?? u.completion_tokens ?? 0;
-  const parsed = a.timestamp ? Date.parse(a.timestamp) : NaN;
-  const endMs = Number.isFinite(parsed) ? parsed : Date.now();
-  const startNs = BigInt(endMs - 1000) * 1000000n;
-  const endNs = BigInt(endMs) * 1000000n;
-  const model = (turn.modelId || "gpt-oss-120b").split("/").pop();
-  const attr = (k, v, t = "stringValue") => ({ key: k, value: { [t]: v } });
+const clip = (s, n) => { s = s || ""; return s.length > n ? s.slice(0, n) + "…" : s; };
+const tms = (ts) => { const p = ts ? Date.parse(ts) : NaN; return Number.isFinite(p) ? p : null; };
+const A = (pairs) => pairs.map(([k, v, t = "stringValue"]) => ({ key: k, value: { [t]: String(v) } }));
+
+// Build one OTLP span (ms times -> ns).
+function mkSpan({ traceId, spanId, parentId, name, start, end, attrs, error }) {
+  const s = Math.max(1, start || Date.now());
+  const e = Math.max(s + 1, end || s + 1);
   return {
-    traceId: hex(32), spanId: hex(16), name: "llm", kind: 1,
-    startTimeUnixNano: startNs.toString(), endTimeUnixNano: endNs.toString(),
-    attributes: [
-      attr("openinference.span.kind", "LLM"),
-      attr("llm.model_name", model),
-      attr("llm.provider", turn.provider || "openclaw"),
-      attr("llm.system", "openai"),
-      attr("gen_ai.system", "openai"),
-      attr("gen_ai.operation.name", "chat"),
-      attr("gen_ai.request.model", model),
-      attr("input.value", prompt), attr("input.mime_type", "text/plain"),
-      attr("output.value", completion), attr("output.mime_type", "text/plain"),
-      attr("llm.input_messages.0.message.role", "user"),
-      attr("llm.input_messages.0.message.content", prompt),
-      attr("llm.output_messages.0.message.role", "assistant"),
-      attr("llm.output_messages.0.message.content", completion),
-      attr("llm.token_count.prompt", String(pt), "intValue"),
-      attr("llm.token_count.completion", String(ct), "intValue"),
-      attr("llm.token_count.total", String(pt + ct), "intValue"),
-      attr("agent", "openclaw-agent:main"),
-      attr("governed.by", "galileo-agent-control"),
-    ],
-    status: { code: 1 },
+    traceId, spanId, ...(parentId ? { parentSpanId: parentId } : {}),
+    name, kind: 1,
+    startTimeUnixNano: (BigInt(s) * 1000000n).toString(),
+    endTimeUnixNano: (BigInt(e) * 1000000n).toString(),
+    attributes: A(attrs),
+    status: error ? { code: 2, message: "tool error" } : { code: 1 },
   };
+}
+
+// The governor's verdict is exact in the trace itself: a blocked step returns
+// "[Agent Control blocked this request] <control>", an allowed one returns its real
+// result. Derive allow/deny (and the control that fired) from that, no fuzzy matching.
+const BLOCK_RE = /\[?Agent Control blocked this request\]?\s*([\w:-]+)?/i;
+const govOf = (text) => { const m = BLOCK_RE.exec(text || ""); return m ? { action: "deny", control: m[1] || "" } : { action: "allow", control: "" }; };
+
+// A full OpenInference trace per turn: a parent AGENT span with a child LLM span for
+// each model step and a child TOOL span for each tool call (with its input + output),
+// all sharing one trace and grouped by session. Galileo then sees and scores every
+// part of the turn (each Webex tool call, each reasoning step), not just the final answer.
+function turnToSpans(turn) {
+  const msgs = turn.messages || [];
+  // latest turn only: from the last user message to the end (older turns were already sent)
+  let ui = -1;
+  for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].role === "user") { ui = i; break; } }
+  if (ui < 0) return [];
+  const slice = msgs.slice(ui);
+  const prompt = textOf(slice[0].content);
+  let finalText = "";
+  for (let i = slice.length - 1; i >= 0; i--) {
+    if (slice[i].role === "assistant") { const t = textOf(slice[i].content); if (t.trim()) { finalText = t; break; } }
+  }
+  const hasTools = slice.some((m) => m.role === "toolResult");
+  if (!finalText.trim() && !hasTools) return [];
+
+  const model = (turn.modelId || "model").split("/").pop();
+  const session = turn.sessionKey || turn.sessionId || "main";
+  const traceId = hex(32), parentId = hex(16);
+  const t0 = tms(slice[0].timestamp) || Date.now();
+  const tN = tms(slice[slice.length - 1].timestamp) || t0;
+  const denied = slice.some((m) => (m.role === "toolResult" || m.role === "assistant") && govOf(textOf(m.content)).action === "deny");
+  const base = [["session.id", session], ["agent", "openclaw-agent:main"], ["governed.by", "galileo-agent-control"]];
+
+  const spans = [mkSpan({
+    traceId, spanId: parentId, parentId: null, name: "agent turn", start: t0, end: tN,
+    attrs: [["openinference.span.kind", "AGENT"], ["input.value", clip(prompt, 8000)], ["input.mime_type", "text/plain"],
+      ["output.value", clip(finalText, 8000)], ["output.mime_type", "text/plain"],
+      ["governance.action", denied ? "deny" : "allow"], ...base],
+  })];
+
+  // toolCall id -> the arguments the assistant passed (so the TOOL span shows real input)
+  const argsById = {};
+  for (const m of slice) if (m.role === "assistant" && Array.isArray(m.content))
+    for (const c of m.content) if (c && c.type === "toolCall") argsById[c.id] = c;
+
+  let cursor = t0;
+  for (const m of slice) {
+    if (m.role === "assistant") {
+      const calls = Array.isArray(m.content) ? m.content.filter((c) => c && c.type === "toolCall") : [];
+      const text = textOf(m.content);
+      const out = text || (calls.length ? "calls: " + calls.map((c) => c.name).join(", ") : "");
+      if (!out.trim()) continue;
+      const u = m.usage || {};
+      const end = tms(m.timestamp) || cursor;
+      const gl = govOf(out);
+      spans.push(mkSpan({
+        traceId, spanId: hex(16), parentId, name: "llm", start: cursor, end,
+        attrs: [["openinference.span.kind", "LLM"], ["llm.model_name", model], ["gen_ai.system", "openai"],
+          ["gen_ai.request.model", model], ["input.value", clip(prompt, 4000)], ["output.value", clip(out, 6000)],
+          ["llm.token_count.prompt", u.inputTokens ?? u.promptTokens ?? 0, "intValue"],
+          ["llm.token_count.completion", u.outputTokens ?? u.completionTokens ?? 0, "intValue"],
+          ["governance.action", gl.action], ...(gl.control ? [["governance.control", gl.control]] : []), ...base],
+      }));
+      cursor = end;
+    } else if (m.role === "toolResult") {
+      const arg = argsById[m.toolCallId];
+      const end = tms(m.timestamp) || cursor;
+      const gt = govOf(textOf(m.content));
+      spans.push(mkSpan({
+        traceId, spanId: hex(16), parentId, name: m.toolName || "tool", start: cursor, end, error: m.isError || gt.action === "deny",
+        attrs: [["openinference.span.kind", "TOOL"], ["tool.name", m.toolName || "tool"],
+          ["input.value", arg ? clip(JSON.stringify(arg.arguments || {}), 2000) : ""],
+          ["output.value", clip(textOf(m.content), 4000)],
+          ["governance.action", gt.action], ...(gt.control ? [["governance.control", gt.control]] : []), ...base],
+      }));
+      cursor = end;
+    }
+  }
+  return spans;
 }
 
 async function postSpans(spans) {
@@ -97,8 +148,8 @@ function newTurns(state) {
     if (o.stage !== "session:after") continue;               // completed turn only
     const id = `${o.runId}:${o.seq}`;
     if (seen.has(id)) continue;
-    const span = turnToSpan(o);
-    if (span) out.push({ id, span });
+    const spans = turnToSpans(o);
+    if (spans.length) out.push({ id, spans });
   }
   return out;
 }
@@ -107,14 +158,15 @@ async function tick() {
   const state = loadState();
   const items = newTurns(state);
   if (!items.length) return 0;
-  const r = await postSpans(items.map((i) => i.span));
+  const spans = items.flatMap((i) => i.spans);
+  const r = await postSpans(spans);
   if (r.code >= 200 && r.code < 300) {
     let rejected = "?";
     try { rejected = JSON.parse(r.body)?.partialSuccess?.rejectedSpans ?? "0"; } catch { rejected = "0"; }
     state.seen.push(...items.map((i) => i.id));
-    if (state.seen.length > 500) state.seen = state.seen.slice(-500);
+    if (state.seen.length > 5000) state.seen = state.seen.slice(-5000);  // must exceed the rotation tail (2000 lines) or kept turns re-send
     saveState(state);
-    console.log(`${new Date().toISOString()} sent ${items.length} span(s) -> Galileo (HTTP ${r.code}, rejected=${rejected})`);
+    console.log(`${new Date().toISOString()} sent ${items.length} turn(s) / ${spans.length} span(s) -> Galileo (HTTP ${r.code}, rejected=${rejected})`);
   } else {
     console.log(`${new Date().toISOString()} Galileo POST failed HTTP ${r.code}: ${r.body.slice(0, 200)}`);
   }

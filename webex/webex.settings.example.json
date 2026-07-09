@@ -1,0 +1,7 @@
+{
+  "_comment": "BYO Webex integration - each user sets their OWN. Copy to the path in WEBEX_SETTINGS (default ~/.openclaw/webex.json), fill clientId/clientSecret/redirectUri from your integration at developer.webex.com, then run: node oauth-setup.mjs url -> approve -> node oauth-setup.mjs exchange <code>. The refreshToken is filled automatically by that flow; keep this file 0600.",
+  "clientId": "",
+  "clientSecret": "",
+  "redirectUri": "https://your-redirect-uri/callback",
+  "refreshToken": ""
+}
