@@ -112,20 +112,39 @@ function homeView(st){
     return `<div class="svc"><i class="dot ${on?'up':'down'}"></i><span class="nm">${label}</span><span class="st">${on?'running':'stopped'}</span></div>`;}).join('');
   const g=st.gov;
   return `<h1>Home</h1><p class="sub">One governed OpenClaw agent. ${up?'Running now.':'Not running.'} Governance is ${g.enabled?'ON':'OFF'}${g.fail_closed?', fail-closed':''}.</p>
-    <div>
-      <div class="stat"><b>${g.decisions??'—'}</b><span>decisions logged</span></div>
-      <div class="stat"><b>${g.blocked??'—'}</b><span>blocked</span></div>
-      <div class="stat"><b>${(st.controls||[]).length||'—'}</b><span>active controls</span></div>
-      <div class="stat"><b style="font-size:15px;font-weight:600">${esc(st.llm.model||'—')}</b><span>model</span></div>
-    </div>
+    ${up?statsRow(st):quickStart(st)}
     <h2>The stack</h2><div class="card">${rows}</div>
-    <div class="foot">
-      ${up?`<button class="btn ghost" onclick="lifecycle('down','Stopping the stack…')">Stop</button>`
-          :`<button class="btn" onclick="lifecycle('up','Building + starting (first time is slow)…')">Start the stack</button>`}
-      <button class="btn ghost" onclick="lifecycle('up','Rebuilding + restarting…')">Rebuild</button>
-    </div>
+    ${up?`<div class="foot"><button class="btn ghost" onclick="lifecycle('down','Stopping the stack…')">Stop</button>
+       <button class="btn ghost" onclick="lifecycle('up','Rebuilding + restarting…')">Rebuild</button></div>`:''}
     <p class="sub" style="margin-top:12px">Agent Control policy UI (advanced): <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a></p>`;
 }
+function statsRow(st){const g=st.gov;
+  return `<div>
+    <div class="stat"><b>${g.decisions??'·'}</b><span>decisions logged</span></div>
+    <div class="stat"><b>${g.blocked??'·'}</b><span>blocked</span></div>
+    <div class="stat"><b>${(st.controls||[]).length||'·'}</b><span>active controls</span></div>
+    <div class="stat"><b style="font-size:15px;font-weight:600">${esc(st.llm.model||'·')}</b><span>model</span></div>
+  </div>`;
+}
+function quickStart(st){
+  const s=st.setup||{}; const gpu=s.gpu;
+  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen2.5:7b':m.id==='qwen2.5:1.5b');
+    const have=(s.downloaded||[]).some(x=>x===m.id||x.startsWith(m.id));
+    return `<option value="${m.id}" ${def?'selected':''}>${m.id} &middot; ${m.note}${have?' (downloaded)':''}</option>`;}).join('');
+  return `<div class="card" style="border-color:var(--ac)">
+    <h2 style="margin-top:0">Quick start</h2>
+    <p class="sub" style="margin-bottom:12px">No setup needed. This runs a model on your machine ${gpu?'<b style="color:var(--g)">with your GPU</b>':'<b>on the CPU</b>'} and starts the governed agent.${gpu?'':' No GPU detected, so a small, fast model is picked for you.'}</p>
+    <label style="font-size:13px;color:var(--hd)">Model</label>
+    <select id="qsmodel" style="margin:5px 0 12px">${opts}</select>
+    <div class="foot" style="margin:0">
+      <button class="btn" onclick="quickstart()">Download model &amp; start</button>
+      ${s.configured&&!s.local?`<button class="btn ghost" onclick="lifecycle('up','Starting with your configured LLM…')">Start with my LLM (${esc(st.llm.model||'external')})</button>`:''}
+    </div>
+    <p class="cx-help" style="margin-top:8px">First run downloads the model and compiles the agent (a few minutes). Both are kept afterwards.</p></div>`;
+}
+async function quickstart(){const m=$('#qsmodel').value;
+  await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
+  applyOverlay('Downloading '+m+' + building the agent (first time is slow)…');}
 async function lifecycle(which,title){await api('/api/'+which,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});applyOverlay(title);}
 
 /* ---------- Connections (redesigned) ---------- */
@@ -208,8 +227,8 @@ function governanceView(st){
   return `<h1>Governance</h1>
     <p class="sub">Every tool call and model turn is checked against these rules before it runs. Fail-closed: if the governor is down, actions are blocked.</p>
     <div class="gov-line"><i class="dot up"></i> Governance is always on. These rules are enforced by Agent Control on every action.</div>
-    <div class="stat"><b>${st.gov.decisions??'—'}</b><span>decisions logged</span></div>
-    <div class="stat"><b>${st.gov.blocked??'—'}</b><span>blocked</span></div>
+    <div class="stat"><b>${st.gov.decisions??'·'}</b><span>decisions logged</span></div>
+    <div class="stat"><b>${st.gov.blocked??'·'}</b><span>blocked</span></div>
     <h2>Active controls</h2>
     <div class="card">${rows}</div>
     <p class="sub" style="margin-top:10px">Add, edit, or remove rules live in the Agent Control UI: <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a>. Changes apply immediately, no restart.</p>`;

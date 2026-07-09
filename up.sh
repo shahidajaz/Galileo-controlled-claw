@@ -31,9 +31,29 @@ elif grep -qE '^SPLUNK_HEC_URL=.+' .env; then
 fi
 grep -qE '^SPLUNK_O11Y_REALM=.+' .env && PROFILES+=(--profile splunk-o11y)
 
+# Local model mode: if the agent's LLM points at the bundled Ollama, run it and use
+# the GPU when one is present. Otherwise the agent uses your external LLM_BASE_URL.
+CF=(-f compose.yml); LOCAL_MODEL=0
+if grep -qE '^LLM_BASE_URL=.*ollama' .env; then
+  LOCAL_MODEL=1; PROFILES+=(--profile models)
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    CF+=(-f compose.gpu.yml); echo "   local model: GPU detected, Ollama will use it"
+  else
+    echo "   local model: no GPU, Ollama runs on CPU (use a small model like qwen2.5:1.5b)"
+  fi
+fi
+
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
 echo "   profiles: ${PROFILES[*]:-<none>}"
-docker compose "${PROFILES[@]}" up -d --build
+docker compose "${CF[@]}" "${PROFILES[@]}" up -d --build
+
+# Download the chosen local model into Ollama (first time only; kept afterwards).
+if [ "$LOCAL_MODEL" = 1 ]; then
+  M=$(grep -E '^LLM_MODEL=' .env | cut -d= -f2)
+  echo ">> ensuring local model present: ${M}"
+  docker compose "${CF[@]}" --profile models exec -T ollama ollama pull "${M}" || \
+    echo "   (could not pull ${M} yet; the portal Quick start can retry)"
+fi
 
 # Wait briefly for the governor to answer, then print the access card.
 printf ">> waiting for services"

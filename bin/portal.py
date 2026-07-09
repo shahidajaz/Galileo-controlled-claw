@@ -18,6 +18,32 @@ AGENT = "openclaw-agent:main"
 OC_SERVICE = "openclaw"                       # the single agent's compose service
 PORT = int(os.environ.get("PORTAL_PORT", "8891"))
 
+# Recommended local models, tagged by what hardware they suit.
+RECMODELS = [
+    {"id": "qwen2.5:1.5b", "note": "~1 GB, fast, great on CPU", "tier": "cpu"},
+    {"id": "qwen2.5:3b",   "note": "~2 GB, smarter, OK on CPU", "tier": "cpu"},
+    {"id": "llama3.2:3b",  "note": "~2 GB, general purpose",    "tier": "cpu"},
+    {"id": "qwen2.5:7b",   "note": "~4.7 GB, best quality, GPU recommended", "tier": "gpu"},
+]
+
+_GPU = None
+def has_gpu():
+    global _GPU
+    if _GPU is None:
+        try:
+            _GPU = subprocess.run(["nvidia-smi", "-L"], capture_output=True, timeout=5).returncode == 0
+        except Exception:
+            _GPU = False
+    return _GPU
+
+def ollama_models():
+    try:
+        out = subprocess.run(["docker", "compose", "-f", CF, "--profile", "models", "exec", "-T",
+                              "ollama", "ollama", "list"], cwd=ROOT, capture_output=True, text=True, timeout=15).stdout
+        return [ln.split()[0] for ln in out.splitlines()[1:] if ln.strip()]
+    except Exception:
+        return []
+
 # ---------- .env data layer ----------
 def envget(k, d=""):
     p = os.path.join(ROOT, ".env")
@@ -111,8 +137,13 @@ def state():
     }
     webex = {"connected": bool(envget("WEBEX_REFRESH_TOKEN")), "client_id": bool(envget("WEBEX_CLIENT_ID")),
              "redirect": envget("WEBEX_REDIRECT_URI", "")}
+    base = envget("LLM_BASE_URL"); local = "ollama" in (base or "")
+    setup = {"local": local, "gpu": has_gpu(), "model": envget("LLM_MODEL"),
+             "configured": bool(envget("LLM_MODEL")) and bool(base),
+             "recommended": RECMODELS,
+             "downloaded": ollama_models() if (local and "ollama" in run) else []}
     return {"stack": stack, "gov": gov, "access": access, "controls": ac_controls(),
-            "webex": webex, "llm": {"model": envget("LLM_MODEL"), "base": envget("LLM_BASE_URL")},
+            "webex": webex, "llm": {"model": envget("LLM_MODEL"), "base": base}, "setup": setup,
             "ac_port": envget("AC_PORT", "8181"), "building": BUILD["running"]}
 
 # ---------- chat ----------
@@ -276,6 +307,14 @@ class H(BaseHTTPRequestHandler):
             s = d.get("splunk", {}); setpair(s.get("on"), "SPLUNK_HEC_URL", s.get("url", "")); setpair(s.get("on"), "SPLUNK_HEC_TOKEN", s.get("token", ""))
             start_build(["docker", "compose", "-f", CF, "up", "-d"])   # recreate only changed containers
             return self._send(200, json.dumps({"started": True}))
+        if u.path == "/api/quickstart":
+            # one click: point the agent at the bundled Ollama, pick a model, build + pull + start
+            m = (d.get("model") or ("qwen2.5:7b" if has_gpu() else "qwen2.5:1.5b")).strip()
+            setenv("LLM_BASE_URL", "http://ollama:11434/v1")
+            setenv("LLM_MODEL", m)
+            setenv("LLM_API_KEY", "unused")
+            start_build(["bash", "up.sh"])
+            return self._send(200, json.dumps({"started": True, "model": m}))
         if u.path == "/api/up":
             start_build(["bash", "up.sh"])
             return self._send(200, json.dumps({"started": True}))

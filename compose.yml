@@ -43,6 +43,10 @@ services:
       # used. Set CISCO_AI_DEFENSE_API_KEY in .env + run cisco/enable.sh to turn on.
       # WARNING: when on, governed content egresses to Cisco's cloud inspect API.
       AI_DEFENSE_API_KEY: "${CISCO_AI_DEFENSE_API_KEY:-}"
+      # DefenseClaw local evaluator (OFF by default). Same pattern, but LOCAL (no
+      # egress). Set DEFENSECLAW_ENABLED=true + run defenseclaw/enable.sh to turn on.
+      DEFENSECLAW_TOKEN: "${DEFENSECLAW_TOKEN:-}"
+      DEFENSECLAW_BASE_URL: "${DEFENSECLAW_BASE_URL:-http://host.docker.internal:18970}"
     restart: unless-stopped
 
   # --- OpenClaw: the governed agent (gateway + Galileo forwarder baked in) -----
@@ -195,6 +199,15 @@ services:
     volumes: ["fwdstate:/state"]
     restart: unless-stopped
 
+  # Optional bundled local model server (Ollama). Off unless you use a local model:
+  # up.sh turns on `--profile models` automatically when LLM_BASE_URL points at ollama.
+  # GPU acceleration is added by compose.gpu.yml when an NVIDIA GPU is detected.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["models"]
+    volumes: ["ollamamodels:/root/.ollama"]
+    restart: unless-stopped
+
 volumes:
   webexdata: {}
   openclawdata: {}
@@ -202,3 +215,4 @@ volumes:
   splunkvar: {}
   splunketc: {}
   fwdstate: {}
+  ollamamodels: {}
