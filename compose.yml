@@ -39,6 +39,10 @@ services:
       AGENT_CONTROL_API_KEYS: "${AC_API_KEY}"
       AGENT_CONTROL_ADMIN_API_KEYS: "${AC_ADMIN_KEY}"
       AGENT_CONTROL_SESSION_SECRET: "${AC_SESSION_SECRET}"
+      # Cisco AI Defense evaluator (OFF by default). Blank = the evaluator is never
+      # used. Set CISCO_AI_DEFENSE_API_KEY in .env + run cisco/enable.sh to turn on.
+      # WARNING: when on, governed content egresses to Cisco's cloud inspect API.
+      AI_DEFENSE_API_KEY: "${CISCO_AI_DEFENSE_API_KEY:-}"
     restart: unless-stopped
 
   # --- OpenClaw: the governed agent (gateway + Galileo forwarder baked in) -----
