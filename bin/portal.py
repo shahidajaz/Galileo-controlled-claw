@@ -127,14 +127,21 @@ def ac_control_data(cid):
     data = d.get("data") if isinstance(d.get("data"), dict) else d
     return {k: data.get(k) for k in ("enabled", "execution", "scope", "condition", "action") if k in data}
 
-def control_data(step, pattern, decision, steer_msg=""):
+def control_data(step, pattern, decision, steer_msg="", detector="regex"):
     action = {"decision": decision}
     if decision == "steer":
         action["steering_context"] = {"message": steer_msg or "Please rephrase your request."}
+    if detector == "defenseclaw":
+        # Send this step to the local DefenseClaw gateway for a semantic verdict.
+        evaluator = {"name": "defenseclaw", "config": {
+            "base_url": envget("DEFENSECLAW_BASE_URL", "http://host.docker.internal:18970"),
+            "route": "tool" if step == "tool" else "request",
+            "token_env": "DEFENSECLAW_TOKEN", "on_error": "deny"}}
+    else:
+        evaluator = {"name": "regex", "config": {"pattern": pattern}}
     return {"enabled": True, "execution": "server",
             "scope": {"step_types": [step], "stages": ["pre"]},
-            "condition": {"selector": {"path": "input"},
-                          "evaluator": {"name": "regex", "config": {"pattern": pattern}}},
+            "condition": {"selector": {"path": "input"}, "evaluator": evaluator},
             "action": action}
 
 def audit(where=""):
@@ -179,6 +186,7 @@ def state():
     return {"stack": stack, "gov": gov, "access": access, "controls": controls,
             "webex": webex, "llm": {"model": envget("LLM_MODEL"), "base": base}, "setup": setup,
             "ready": bool(core_up and controls is not None),
+            "defenseclaw": bool(envget("DEFENSECLAW_TOKEN")),
             "ac_port": envget("AC_PORT", "8181"), "building": BUILD["running"]}
 
 def agent_ready():
@@ -379,11 +387,14 @@ class H(BaseHTTPRequestHandler):
             # the portal calls Agent Control's API with the admin key, server-side.
             name = (d.get("name") or "").strip()
             step = d.get("step") if d.get("step") in ("tool", "llm") else "tool"
+            detector = d.get("detector") if d.get("detector") in ("regex", "defenseclaw") else "regex"
             pattern = d.get("pattern") or ""
             decision = d.get("decision") if d.get("decision") in ("deny", "steer", "observe") else "deny"
-            if not name or not pattern:
-                return self._send(200, json.dumps({"ok": False, "error": "Name and a match pattern are required."}))
-            data = control_data(step, pattern, decision, d.get("steer_msg", ""))
+            if not name:
+                return self._send(200, json.dumps({"ok": False, "error": "A name is required."}))
+            if detector == "regex" and not pattern:
+                return self._send(200, json.dumps({"ok": False, "error": "A match pattern is required for the regex detector."}))
+            data = control_data(step, pattern, decision, d.get("steer_msg", ""), detector)
             cid = d.get("id")
             if cid:
                 st, _ = _ac("PUT", f"/api/v1/controls/{cid}/data", {"data": data})

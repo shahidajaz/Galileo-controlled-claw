@@ -63,6 +63,14 @@ if grep -qE '^LLM_BASE_URL=.*ollama' .env; then
   echo "   local model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2) on $([ "$GPU" = 1 ] && echo GPU || echo CPU)"
 fi
 
+# Agent Control base image (stock server from the upstream tag); our ac-server/Dockerfile
+# overlays the DefenseClaw evaluator on top. Built once, then cached.
+BASE="${AC_BASE_IMAGE:-openclaw-ac-base:8.2.0}"
+if ! docker image inspect "$BASE" >/dev/null 2>&1; then
+  echo ">> building Agent Control base image ($BASE) from source (first time, slow)..."
+  docker build -t "$BASE" -f server/Dockerfile "https://github.com/agentcontrol/agent-control.git#v8.2.0" || { echo "base build failed"; exit 1; }
+fi
+
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
 echo "   profiles: ${PROFILES[*]:-<none>}"
 docker compose "${CF[@]}" "${PROFILES[@]}" up -d --build

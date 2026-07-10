@@ -390,19 +390,27 @@ function governanceView(st){
       <div class="cx-field"><label>Name</label><input id="rc_name" placeholder="e.g. block-secrets"></div>
       <div class="row" style="gap:10px">
         <div class="cx-field" style="flex:1"><label>Applies to</label><select id="rc_step"><option value="tool">Tool calls</option><option value="llm">Model prompts</option></select></div>
+        <div class="cx-field" style="flex:1"><label>Detector</label><select id="rc_det" onchange="rcDetector(this.value)"><option value="regex">Regex (a pattern)</option>${st.defenseclaw?`<option value="defenseclaw">DefenseClaw (semantic)</option>`:''}</select></div>
         <div class="cx-field" style="flex:1"><label>Action</label><select id="rc_dec" onchange="var w=$('#rc_steerwrap');if(w)w.style.display=this.value==='steer'?'block':'none'"><option value="deny">Block</option><option value="steer">Steer</option><option value="observe">Log only</option></select></div>
       </div>
-      <div class="cx-field"><label>Match (regular expression)</label><input id="rc_pat" placeholder="(?i)password|secret|api[_-]?key">
+      <div class="cx-field" id="rc_patwrap"><label>Match (regular expression)</label><input id="rc_pat" placeholder="(?i)password|secret|api[_-]?key">
         <div class="cx-help">If the tool input or prompt matches this, the action fires. Case-insensitive: start the pattern with (?i).</div></div>
+      <div class="cx-field" id="rc_dcnote" style="display:none"><div class="cx-help">DefenseClaw inspects the whole input at your local gateway and returns the verdict. No pattern needed.</div></div>
       <div class="cx-field" id="rc_steerwrap" style="display:none"><label>Steer message</label><input id="rc_steer" placeholder="Please rephrase without sensitive data."></div>
       <div class="foot" style="margin-top:2px"><button class="btn" onclick="saveControl()">Add rule</button></div>
     </div>`:''}
     <p class="sub" style="margin-top:10px">Prefer the raw vendor console? It is on the <a class="ac" onclick="go('control')">Agent Control</a> tab.</p>`;
 }
+function rcDetector(v){
+  const dc=v==='defenseclaw';
+  var p=$('#rc_patwrap'),n=$('#rc_dcnote'); if(p)p.style.display=dc?'none':'block'; if(n)n.style.display=dc?'block':'none';
+}
 async function saveControl(){
-  const b={name:($('#rc_name').value||'').trim(),step:$('#rc_step').value,decision:$('#rc_dec').value,
+  const det=($('#rc_det')&&$('#rc_det').value)||'regex';
+  const b={name:($('#rc_name').value||'').trim(),step:$('#rc_step').value,detector:det,decision:$('#rc_dec').value,
     pattern:($('#rc_pat').value||'').trim(),steer_msg:($('#rc_steer')&&$('#rc_steer').value)||''};
-  if(!b.name||!b.pattern){toast('Give it a name and a match pattern');return;}
+  if(!b.name){toast('Give it a name');return;}
+  if(det==='regex'&&!b.pattern){toast('Add a match pattern');return;}
   const r=await api('/api/controls/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});
   if(r.ok){toast('Rule added');loadState();}else toast(r.error||'Could not add the rule');
 }

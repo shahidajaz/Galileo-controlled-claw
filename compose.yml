@@ -24,9 +24,13 @@ services:
     restart: unless-stopped
 
   server:
+    # Stock Agent Control + our DefenseClaw evaluator overlay (ac-server/Dockerfile).
+    # up.sh builds the base image (openclaw-ac-base) from the upstream tag once.
     build:
-      context: "https://github.com/agentcontrol/agent-control.git#v8.2.0"
-      dockerfile: server/Dockerfile
+      context: .
+      dockerfile: ac-server/Dockerfile
+      args:
+        BASE_IMAGE: "${AC_BASE_IMAGE:-openclaw-ac-base:8.2.0}"
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["127.0.0.1:${AC_PORT:-8181}:8000"]
@@ -39,6 +43,11 @@ services:
       AGENT_CONTROL_API_KEYS: "${AC_API_KEY}"
       AGENT_CONTROL_ADMIN_API_KEYS: "${AC_ADMIN_KEY}"
       AGENT_CONTROL_SESSION_SECRET: "${AC_SESSION_SECRET}"
+      # DefenseClaw detector (optional): a rule can use the `defenseclaw` evaluator to
+      # send tool calls / prompts to your local DefenseClaw gateway for a verdict. Blank
+      # token = the detector is present but unused. The evaluator reads DEFENSECLAW_TOKEN.
+      DEFENSECLAW_TOKEN: "${DEFENSECLAW_TOKEN:-}"
+      DEFENSECLAW_BASE_URL: "${DEFENSECLAW_BASE_URL:-http://host.docker.internal:18970}"
     restart: unless-stopped
 
   # --- OpenClaw: the governed agent (gateway + Galileo forwarder baked in) -----
