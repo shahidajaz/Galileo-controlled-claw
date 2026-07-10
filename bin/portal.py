@@ -136,7 +136,10 @@ def control_data(step, pattern, decision, steer_msg="", detector="regex"):
         evaluator = {"name": "defenseclaw", "config": {
             "base_url": envget("DEFENSECLAW_BASE_URL", "http://host.docker.internal:18970"),
             "route": "tool" if step == "tool" else "request",
-            "token_env": "DEFENSECLAW_TOKEN", "on_error": "deny"}}
+            "token_env": "DEFENSECLAW_TOKEN", "on_error": "deny",
+            # fresh verdict per call: a governance detector must not serve a stale cached
+            # result (e.g. a transient fail-closed block poisoning later benign calls).
+            "cache_ttl_s": 0, "timeout_ms": 15000}}
     else:
         evaluator = {"name": "regex", "config": {"pattern": pattern}}
     return {"enabled": True, "execution": "server",
