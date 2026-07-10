@@ -68,6 +68,8 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 .msg{margin-bottom:10px}.msg .who{font-family:var(--mono);font-size:11px;color:var(--mu)}
 .msg.u .who{color:var(--ac)}.msg pre{margin:3px 0 0;white-space:pre-wrap;font-family:var(--sans)}
 .log{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10px;height:38vh;overflow:auto;font-family:var(--mono);font-size:12px;white-space:pre-wrap}
+.frame{width:100%;height:calc(100vh - 175px);min-height:420px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.mono{font-family:var(--mono);font-size:12px;background:#0f151c;border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
 /* modal */
 .backdrop{position:fixed;inset:0;background:rgba(4,7,11,.6);z-index:9;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
 .modal{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:22px;max-width:560px;width:100%}
@@ -88,7 +90,7 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const S={view:'home',state:null};
-const NAV=[['home','Home'],['access','Connections'],['governance','Governance'],['chat','Chat']];
+const NAV=[['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
 const CHAT={msgs:[],busy:false};
 
 async function api(path,opts){const r=await fetch(path,opts);return r.json();}
@@ -101,6 +103,8 @@ function render(){renderNav();const st=S.state;if(!st){$('#main').innerHTML='<p 
   if(S.view==='home')$('#main').innerHTML=homeView(st);
   else if(S.view==='access')$('#main').innerHTML=accessView(st);
   else if(S.view==='governance')$('#main').innerHTML=governanceView(st);
+  else if(S.view==='control')$('#main').innerHTML=controlView(st);
+  else if(S.view==='monitoring')$('#main').innerHTML=monitoringView(st);
   else if(S.view==='chat')$('#main').innerHTML=chatView(st);
 }
 
@@ -232,6 +236,35 @@ function governanceView(st){
     <h2>Active controls</h2>
     <div class="card">${rows}</div>
     <p class="sub" style="margin-top:10px">Add, edit, or remove rules live in the Agent Control UI: <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a>. Changes apply immediately, no restart.</p>`;
+}
+
+/* ---------- Agent Control (embedded console) ---------- */
+function controlView(st){
+  if(!st.stack.server)
+    return `<h1>Agent Control</h1><p class="sub">The full governance console, embedded here. Start the stack from Home first, then this shows the live policy editor.</p>`;
+  const url=`http://127.0.0.1:${esc(st.ac_port)}`;
+  return `<h1>Agent Control</h1>
+    <p class="sub">The full governance console, embedded. Add, edit, or remove policy rules; changes apply live. <a class="ac" href="${url}" target="_blank" rel="noopener">Open in a new tab &#8599;</a></p>
+    <iframe class="frame" src="${url}" title="Agent Control"></iframe>
+    <p class="cx-help" style="margin-top:8px">Running on a remote box? Tunnel this port too: <span class="mono">ssh -L ${esc(st.ac_port)}:127.0.0.1:${esc(st.ac_port)} &lt;box&gt;</span></p>`;
+}
+
+/* ---------- Monitoring (external dashboards) ---------- */
+function monitoringView(st){
+  const a=st.access; const realm=a.o11y.realm||'';
+  const o11yUrl=realm?`https://app.${esc(realm)}.signalfx.com`:'';
+  const card=(on,name,what,url,label)=>`<div class="card">
+     <div class="svc" style="border-top:0;padding-top:0"><i class="dot ${on?'up':'down'}"></i>
+       <span class="nm"><b>${name}</b></span><span class="st">${on?'sending':'off'}</span></div>
+     <div class="mu" style="font-size:13px;margin:6px 0 10px">${what}</div>
+     ${on&&url?`<a class="btn sm" href="${url}" target="_blank" rel="noopener">${label} &#8599;</a>`
+       :on?`<span class="mu" style="font-size:12px">Open your ${name} dashboard to view it.</span>`
+       :`<span class="mu" style="font-size:12px">Turn on in <a class="ac" onclick="go('access')">Connections</a> to start sending data.</span>`}</div>`;
+  return `<h1>Monitoring</h1>
+    <p class="sub">Where the agent's activity is recorded. These run in the cloud and cannot be embedded here, so the buttons open them in a new tab.</p>
+    ${card(a.galileo.on,'Galileo','Every model call, scored for quality, PII, and prompt injection.','https://app.galileo.ai','Open Galileo')}
+    ${card(a.o11y.on,'Splunk Observability','Live health metrics and traces for the agent.',o11yUrl,'Open Splunk Observability')}
+    ${card(a.splunk.on,'Splunk logs','Governance decisions and LLM turns shipped to your Splunk index.','','')}`;
 }
 
 /* ---------- Chat ---------- */
