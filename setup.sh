@@ -17,7 +17,7 @@ cls()  { clear 2>/dev/null || printf '\033[2J\033[3J\033[H'; }
 # ── env + prompt helpers ─────────────────────────────────────────────────────
 cur()    { sed -n "s/^$1=//p" .env | head -1; }
 curdef() { local v; v="$(cur "$1")"; echo "${v:-$2}"; }
-setenv() { if grep -qE "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi; }
+setenv() { if grep -qE "^$1=" .env; then sed -i.bak "s|^$1=.*|$1=$2|" .env && rm -f .env.bak; else printf '%s=%s\n' "$1" "$2" >> .env; fi; }
 ask()    { local a; read -r -p "  $1 [$2]: " a; echo "${a:-$2}"; }
 asksec() { local a; read -r -s -p "  $1: " a; echo >&2; echo "$a"; }
 card()   { cls; printf '\n  %s\n%s\n\n' "${CY}${B}$1${R}" "$HR"; }

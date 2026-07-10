@@ -5,13 +5,59 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Guard against a STRAY docker-compose.override.yml. That file is box-specific
+# (gitignored) and wires services onto external Docker networks that exist only
+# where it was authored. up.sh itself ignores it (we always pass -f compose.yml),
+# but a copy carried to another machine would break a bare `docker compose` command.
+# So: if it is present but its external networks are missing, this is almost
+# certainly a stray copy, stop with a clear message instead of letting it bite later.
+# On the box where those networks exist, this passes silently. Override with ALLOW_OVERRIDE=1.
+if [ -f docker-compose.override.yml ] && [ "${ALLOW_OVERRIDE:-0}" != "1" ]; then
+  missing=""
+  for net in $(grep -E '^[[:space:]]+name:[[:space:]]' docker-compose.override.yml 2>/dev/null | awk '{print $2}'); do
+    docker network inspect "$net" >/dev/null 2>&1 || missing="$missing $net"
+  done
+  if [ -n "$missing" ]; then
+    echo "ERROR: docker-compose.override.yml is present but its external network(s) do not exist:${missing}" >&2
+    echo "       That file is box-specific and should not be copied to another machine." >&2
+    echo "       Fix: remove it here ->  rm docker-compose.override.yml   (or set ALLOW_OVERRIDE=1 to bypass)" >&2
+    exit 1
+  fi
+fi
+
+# Preflight: check the essentials and fail early with a clear message instead of
+# dying halfway through a multi-minute build. Portable across macOS and Linux.
+preflight() {
+  local err=0
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "MISSING: docker. Install Docker Desktop (Mac/Windows) or Docker Engine (Linux)." >&2; err=1
+  else
+    docker info >/dev/null 2>&1 || { echo "Docker is installed but the daemon is not running. Start Docker Desktop and retry." >&2; err=1; }
+    docker compose version >/dev/null 2>&1 || { echo "MISSING: Docker Compose v2 (the 'docker compose' subcommand)." >&2; err=1; }
+  fi
+  command -v python3 >/dev/null 2>&1 || { echo "MISSING: python3 (used to pick free ports)." >&2; err=1; }
+  command -v openssl >/dev/null 2>&1 || { echo "MISSING: openssl (used to generate secrets)." >&2; err=1; }
+  command -v curl    >/dev/null 2>&1 || echo "NOTE: curl not found; the readiness wait is skipped (not fatal)." >&2
+  case "$(uname -m)" in
+    arm64|aarch64) echo "NOTE: ARM64 host. Images build native; first build is slow, and the optional bundled Splunk image is amd64 (emulated). The core run is fine." >&2 ;;
+  esac
+  if command -v df >/dev/null 2>&1; then
+    avail="$(df -Pk . 2>/dev/null | awk 'NR==2{printf "%d", $4/1024/1024}')"
+    if [ -n "${avail:-}" ] && [ "$avail" -lt 6 ]; then
+      echo "NOTE: only ~${avail} GB free here; the default model plus images need ~5-6 GB." >&2
+    fi
+  fi
+  [ "$err" = 0 ] || { echo "Preflight failed. Fix the MISSING item(s) above and rerun ./up.sh" >&2; exit 1; }
+}
+preflight
+
 [ -f .env ] || { cp .env.example .env; echo "created .env from .env.example, edit LLM_* / GALILEO_API_KEY as needed"; }
 
 gen() { openssl rand -hex "${1:-24}"; }
 setblank() {  # setblank KEY VALUE : fill KEY in .env only when it is blank/missing
   local k="$1" v="$2"
   grep -qE "^${k}=.+" .env && return 0
-  if grep -qE "^${k}=" .env; then sed -i "s|^${k}=.*|${k}=${v}|" .env; else echo "${k}=${v}" >> .env; fi
+  if grep -qE "^${k}=" .env; then sed -i.bak "s|^${k}=.*|${k}=${v}|" .env && rm -f .env.bak; else echo "${k}=${v}" >> .env; fi
 }
 setblank AC_PG_PASSWORD    "$(gen)"
 setblank AC_API_KEY        "ac_$(gen)"
@@ -22,7 +68,7 @@ setblank GATEWAY_TOKEN     "$(gen)"
 # Auto-pick free host ports so several governed stacks never collide (e.g. running
 # this next to the fleet). Uses python3 (already required by the portal); works on
 # Mac + Linux + WSL. Only when THIS stack is not already running, so a rebuild keeps ports.
-setkv() { local k="$1" v="$2"; if grep -qE "^${k}=" .env; then sed -i "s|^${k}=.*|${k}=${v}|" .env; else echo "${k}=${v}" >> .env; fi; }
+setkv() { local k="$1" v="$2"; if grep -qE "^${k}=" .env; then sed -i.bak "s|^${k}=.*|${k}=${v}|" .env && rm -f .env.bak; else echo "${k}=${v}" >> .env; fi; }
 free_port() { local k="$1" def="$2" cur p; cur="$(grep -E "^${k}=" .env | cut -d= -f2)"; cur="${cur:-$def}"
   p="$(python3 -c 'import socket,sys
 p=int(sys.argv[1])
