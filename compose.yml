@@ -209,6 +209,22 @@ services:
     volumes: ["ollamamodels:/root/.ollama"]
     restart: unless-stopped
 
+  # DefenseClaw reachability shim (optional, --profile defenseclaw). The Agent Control
+  # server runs in a container and cannot reach a DefenseClaw gateway bound to the host's
+  # 127.0.0.1. This host-network forwarder exposes it on DEFENSECLAW_SHIM_PORT so the
+  # server reaches it at host.docker.internal:<port>. up.sh turns this on when
+  # DEFENSECLAW_TOKEN is set. Advanced: bind your gateway to 0.0.0.0 and skip this.
+  defenseclaw-shim:
+    image: python:3.12-slim
+    profiles: ["defenseclaw"]
+    network_mode: host
+    volumes: ["./bin/dc-shim.py:/dc-shim.py:ro"]
+    command: ["python3", "/dc-shim.py"]
+    environment:
+      DC_LISTEN: "${DEFENSECLAW_SHIM_PORT:-18971}"
+      DC_TARGET: "${DEFENSECLAW_GATEWAY:-127.0.0.1:18970}"
+    restart: unless-stopped
+
 volumes:
   webexdata: {}
   openclawdata: {}

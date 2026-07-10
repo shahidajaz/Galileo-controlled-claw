@@ -49,6 +49,9 @@ elif grep -qE '^SPLUNK_HEC_URL=.+' .env; then
   PROFILES+=(--profile splunk-hec)
 fi
 grep -qE '^SPLUNK_O11Y_REALM=.+' .env && PROFILES+=(--profile splunk-o11y)
+# DefenseClaw detector configured -> run the reachability shim so the AC container can
+# reach your gateway (skip if your gateway already binds a Docker-reachable address).
+grep -qE '^DEFENSECLAW_TOKEN=.+' .env && PROFILES+=(--profile defenseclaw)
 
 # Local model mode: if the agent's LLM points at the bundled Ollama, run it and use
 # the GPU when one is present. Otherwise the agent uses your external LLM_BASE_URL.
