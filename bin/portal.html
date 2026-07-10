@@ -163,49 +163,42 @@ function accessView(st){
   const sec=(id,label,ph,val,help)=>`<div class="cx-field"><label>${label}</label>
      <div class="cx-inrow"><input type="password" id="${id}" placeholder="${ph}" value="${v(val)}"><button type="button" class="cx-eye" onclick="cxEye(this)" title="Show">&#128065;</button></div>
      <div class="cx-help">${help}</div></div>`;
-  const card=(id,name,what,on,creds,body)=>`<div class="cx-card ${on?'open':''}" id="cx_${id}">
+  const card=(id,name,what,on,creds,body)=>`<div class="cx-card" id="cx_${id}">
      <div class="cx-head" onclick="if(event.target.tagName!=='INPUT')cxOpen('${id}')">
        <span class="cx-nm">${name}</span><span class="cx-what">${what}</span>
        <span id="cxchip_${id}">${chip(on,creds)}</span>
        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" id="on_${id}" ${on?'checked':''} onchange="cxToggle('${id}',this.checked)"><span class="tk"></span></label>
      </div>
-     <div class="cx-body">${body}<div class="cx-keep">Turned off later? Your credentials are kept, nothing is deleted.</div></div></div>`;
-  return `<h1>Connections</h1><p class="sub">Choose how people reach the agent and where its activity gets recorded. Governance is always on and is not configured here. Saving only restarts what you changed.</p>
-   <div class="cx-strip"><span class="lead">Always on</span>
-     <span class="cx-pill"><i class="dot up"></i>Chat (this portal)</span>
-     <span class="cx-pill"><i class="dot up"></i>Terminal</span>
-     <span class="cx-pill"><i class="dot up"></i>Governance gate</span>
-     <span class="cx-note">These are built in and cannot be turned off.</span></div>
+     <div class="cx-body">${body}</div></div>`;
+  return `<h1>Connections</h1><p class="sub">How you reach the agent, and where its activity is logged.</p>
    <div class="cx-sec">Chat channels</div>
-   <p class="cx-intro">Extra places to talk to the agent, like your phone or your team's Slack. All optional.</p>
-   ${card('tg','Telegram','Talk to your agent from the Telegram app on your phone.',a.telegram.on,a.telegram.token,
+   ${card('tg','Telegram','Chat from Telegram',a.telegram.on,a.telegram.token,
      sec('a_tg','Bot token','123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxx',a.telegram.token,'In Telegram, message @BotFather, send /newbot, and copy the token it replies with.')
      +txt('a_tgid','Allowed Telegram IDs','123456789, 987654321',a.telegram.id,'Only these accounts can talk to the agent. Message @userinfobot in Telegram to see your ID. Separate several with commas.'))}
-   ${card('dc','Discord','Talk to your agent inside a Discord server.',a.discord.on,a.discord.token,
+   ${card('dc','Discord','Chat from a Discord server',a.discord.on,a.discord.token,
      sec('a_dc','Bot token','MTAx...',a.discord.token,'Create an app at discord.com/developers, open the Bot tab, and copy its token. Then invite the bot to your server.'))}
-   ${card('sl','Slack','Talk to your agent in Slack channels and direct messages.',a.slack.on,a.slack.token,
+   ${card('sl','Slack','Chat from Slack',a.slack.on,a.slack.token,
      `<div class="cx-cardnote">All three values come from one place: your app&rsquo;s page at api.slack.com/apps.</div>`
      +sec('a_sl','Bot token','xoxb-...',a.slack.token,'Under OAuth &amp; Permissions, after installing the app to your workspace. Starts with xoxb-.')
      +sec('a_sla','App token','xapp-...',a.slack.app,'Under Basic Information, App-Level Tokens. Create one with the connections:write scope. Starts with xapp-.')
      +sec('a_sls','Signing secret','Paste the signing secret',a.slack.signing,'Under Basic Information, App Credentials. Lets the agent verify messages really came from Slack.'))}
    <div class="cx-sec">Monitoring</div>
-   <p class="cx-intro">Optional dashboards that record what the agent does, useful for debugging and audits. The agent runs fine without them.</p>
-   ${card('gl','Galileo (AI quality)','Keeps a searchable record of every model call, so you can see what the agent was asked and how it answered.',a.galileo.on,a.galileo.key,
+   ${card('gl','Galileo','Scores every model call',a.galileo.on,a.galileo.key,
      sec('a_gk','API key','Paste your Galileo API key',a.galileo.key,'In Galileo, open Settings, then API Keys, and create one.')
      +txt('a_gp','Project name','OpenClaw_Governed',a.galileo.project,'The Galileo project where these records appear.'))}
-   ${card('o11y','Splunk Observability (health metrics)','Live dashboards for agent health: how busy it is and whether anything is failing.',a.o11y.on,a.o11y.token,
+   ${card('o11y','Splunk Observability','Health metrics and traces',a.o11y.on,a.o11y.token,
      `<div class="cx-field"><label>Region</label><select id="a_or">${realmOpts}</select><div class="cx-help">Splunk calls this your realm. Find it in your web address: app.us1.signalfx.com means us1.</div></div>`
      +sec('a_ot','Access token','Paste an ingest token',a.o11y.token,'In Splunk Observability: Settings, then Access Tokens. Use a token with ingest permission.'))}
-   ${card('sp','Splunk logs','Sends the agent\'s activity logs to your Splunk instance for searching and alerting.',a.splunk.on,a.splunk.url||a.splunk.token,
+   ${card('sp','Splunk logs','Ship activity logs to Splunk',a.splunk.on,a.splunk.url||a.splunk.token,
      txt('a_su','Splunk log endpoint','https://your-splunk:8088/services/collector',a.splunk.url,'This is Splunk&rsquo;s HTTP Event Collector (HEC), its door for incoming logs. Ask whoever runs Splunk for this URL.')
      +sec('a_st','Endpoint token','Paste the HEC token',a.splunk.token,'Created in Splunk under Settings, Data Inputs, HTTP Event Collector.'))}
    <div class="foot"><button class="btn" onclick="saveAccess()">Save &amp; apply</button></div>`;
 }
-function cxToggle(id,on){const el=$('#cx_'+id);if(!el)return;el.classList.toggle('open',on);
+function cxToggle(id,on){const el=$('#cx_'+id);if(!el)return;if(on)el.classList.add('open');
   const has=[...el.querySelectorAll('.cx-body input')].some(i=>(i.value||'').trim());
   $('#cxchip_'+id).innerHTML=on?`<span class="cx-chip"><i class="dot up"></i>Active</span>`
     :`<span class="cx-chip"><i class="dot down"></i>Off${has?' &middot; <span class="mu">saved</span>':''}</span>`;}
-function cxOpen(id){const el=$('#cx_'+id);if(!el)return;const s=el.querySelector('.sw input');s.checked=!s.checked;cxToggle(id,s.checked);}
+function cxOpen(id){const el=$('#cx_'+id);if(el)el.classList.toggle('open');}
 function cxEye(b){const i=b.previousElementSibling;i.type=i.type==='password'?'text':'password';b.title=i.type==='password'?'Show':'Hide';}
 async function saveAccess(){
   const g=(id)=>($('#'+id)?.value||'').trim();const on=(id)=>!!($('#'+id)&&$('#'+id).checked);
@@ -284,18 +277,14 @@ function controlView(st){
 function monitoringView(st){
   const a=st.access; const realm=a.o11y.realm||'';
   const o11yUrl=realm?`https://app.${esc(realm)}.signalfx.com`:'';
-  const card=(on,name,what,url,label)=>`<div class="card">
-     <div class="svc" style="border-top:0;padding-top:0"><i class="dot ${on?'up':'down'}"></i>
-       <span class="nm"><b>${name}</b></span><span class="st">${on?'sending':'off'}</span></div>
-     <div class="mu" style="font-size:13px;margin:6px 0 10px">${what}</div>
-     ${on&&url?`<a class="btn sm" href="${url}" target="_blank" rel="noopener">${label} &#8599;</a>`
-       :on?`<span class="mu" style="font-size:12px">Open your ${name} dashboard to view it.</span>`
-       :`<span class="mu" style="font-size:12px">Turn on in <a class="ac" onclick="go('access')">Connections</a> to start sending data.</span>`}</div>`;
-  return `<h1>Monitoring</h1>
-    <p class="sub">Where the agent's activity is recorded. These run in the cloud and cannot be embedded here, so the buttons open them in a new tab.</p>
-    ${card(a.galileo.on,'Galileo','Every model call, scored for quality, PII, and prompt injection.','https://app.galileo.ai','Open Galileo')}
-    ${card(a.o11y.on,'Splunk Observability','Live health metrics and traces for the agent.',o11yUrl,'Open Splunk Observability')}
-    ${card(a.splunk.on,'Splunk logs','Governance decisions and LLM turns shipped to your Splunk index.','','')}`;
+  const card=(on,name,url)=>`<div class="card"><div class="svc" style="border-top:0;padding-top:0">
+     <i class="dot ${on?'up':'down'}"></i><span class="nm"><b>${name}</b></span>
+     ${on&&url?`<a class="btn ghost sm" href="${url}" target="_blank" rel="noopener">Open &#8599;</a>`
+       :`<span class="st">${on?'on':'off'}</span>`}</div></div>`;
+  return `<h1>Monitoring</h1><p class="sub">External dashboards. Turn them on in Connections.</p>
+    ${card(a.galileo.on,'Galileo','https://app.galileo.ai')}
+    ${card(a.o11y.on,'Splunk Observability',o11yUrl)}
+    ${card(a.splunk.on,'Splunk logs','')}`;
 }
 
 /* ---------- Chat ---------- */
