@@ -54,12 +54,13 @@ grep -qE '^SPLUNK_O11Y_REALM=.+' .env && PROFILES+=(--profile splunk-o11y)
 # the GPU when one is present. Otherwise the agent uses your external LLM_BASE_URL.
 CF=(-f compose.yml); LOCAL_MODEL=0
 if grep -qE '^LLM_BASE_URL=.*ollama' .env; then
-  LOCAL_MODEL=1; PROFILES+=(--profile models)
-  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
-    CF+=(-f compose.gpu.yml); echo "   local model: GPU detected, Ollama will use it"
-  else
-    echo "   local model: no GPU, Ollama runs on CPU (use a small model like qwen2.5:1.5b)"
+  LOCAL_MODEL=1; PROFILES+=(--profile models); GPU=0
+  command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && { CF+=(-f compose.gpu.yml); GPU=1; }
+  # auto-pick a model by hardware if the user has not chosen one (fresh clone = blank)
+  if ! grep -qE '^LLM_MODEL=.+' .env; then
+    [ "$GPU" = 1 ] && setkv LLM_MODEL "qwen2.5:7b" || setkv LLM_MODEL "qwen2.5:1.5b"
   fi
+  echo "   local model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2) on $([ "$GPU" = 1 ] && echo GPU || echo CPU)"
 fi
 
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
