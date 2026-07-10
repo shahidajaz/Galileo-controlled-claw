@@ -70,6 +70,15 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 .log{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10px;height:38vh;overflow:auto;font-family:var(--mono);font-size:12px;white-space:pre-wrap}
 .frame{width:100%;height:calc(100vh - 175px);min-height:420px;border:1px solid var(--line);border-radius:10px;background:#fff}
 .mono{font-family:var(--mono);font-size:12px;background:#0f151c;border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
+.rail{display:flex;margin:6px 0 20px}
+.rail .st{flex:1;text-align:center;position:relative}
+.rail .st .d{width:12px;height:12px;border-radius:50%;background:var(--mu2);margin:0 auto 6px;position:relative;z-index:1}
+.rail .st.done .d{background:var(--g)}
+.rail .st.cur .d{background:var(--ac);box-shadow:0 0 0 4px var(--acbg)}
+.rail .st.skip .d{background:transparent;border:2px solid var(--mu2)}
+.rail .st b{font-size:11px;color:var(--mu);font-family:var(--mono);font-weight:500}
+.rail .st.cur b{color:var(--ink)}
+.rail .st:not(:last-child):after{content:"";position:absolute;top:5px;left:50%;width:100%;height:2px;background:var(--line);z-index:0}
 /* modal */
 .backdrop{position:fixed;inset:0;background:rgba(4,7,11,.6);z-index:9;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
 .modal{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:22px;max-width:560px;width:100%}
@@ -90,8 +99,9 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const S={view:'home',state:null};
-const NAV=[['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
+const NAV=[['start','Get started'],['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
 const CHAT={msgs:[],busy:false};
+const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,skip:{}};
 
 async function api(path,opts){const r=await fetch(path,opts);return r.json();}
 async function loadState(){S.state=await api('/api/state');render();}
@@ -100,7 +110,8 @@ function toast(m){const t=$('#toast');t.textContent=m;t.className='toast show';c
 
 function renderNav(){$('#nav').innerHTML=NAV.map(([k,l])=>`<a class="${S.view===k?'on':''}" onclick="go('${k}')">${l}</a>`).join('');}
 function render(){renderNav();const st=S.state;if(!st){$('#main').innerHTML='<p class="sub">Loading…</p>';return;}
-  if(S.view==='home')$('#main').innerHTML=homeView(st);
+  if(S.view==='start')$('#main').innerHTML=setupView(st);
+  else if(S.view==='home')$('#main').innerHTML=homeView(st);
   else if(S.view==='access')$('#main').innerHTML=accessView(st);
   else if(S.view==='governance')$('#main').innerHTML=governanceView(st);
   else if(S.view==='control')$('#main').innerHTML=controlView(st);
@@ -150,6 +161,80 @@ async function quickstart(){const m=$('#qsmodel').value;
   await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
   applyOverlay('Downloading '+m+' + building the agent (first time is slow)…');}
 async function lifecycle(which,title){await api('/api/'+which,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});applyOverlay(title);}
+
+/* ---------- Get started (guided setup, ADHD-friendly) ---------- */
+function setupStatus(st){
+  const a=st.access;
+  return {
+    start: st.stack.openclaw?'done':'todo',
+    hello: SETUP.hello?'done':(SETUP.skip.hello?'skip':'todo'),
+    rules: SETUP.rules?'done':(SETUP.skip.rules?'skip':'todo'),
+    channels: (a.telegram.on||a.discord.on||a.slack.on)?'done':(SETUP.skip.channels?'skip':'todo'),
+    monitoring: (a.galileo.on||a.o11y.on||a.splunk.on)?'done':(SETUP.skip.monitoring?'skip':'todo'),
+  };
+}
+function setupView(st){
+  const S2=setupStatus(st);
+  const order=['start','hello','rules','channels','monitoring'];
+  const labels={start:'Start',hello:'Hello',rules:'Rules',channels:'Channels',monitoring:'Monitoring'};
+  const cur=order.find(k=>S2[k]==='todo')||null;
+  const rail=order.map(k=>`<div class="st ${S2[k]==='done'?'done':S2[k]==='skip'?'skip':k===cur?'cur':''}"><div class="d"></div><b>${labels[k]}</b></div>`).join('');
+  const coreDone=S2.start==='done'&&S2.hello==='done';
+  const allDone=order.every(k=>S2[k]==='done'||S2[k]==='skip');
+  let card='';
+  if(allDone) card=`<div class="card" style="border-color:var(--g)"><b>You're set up.</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 10px">One governed agent, running on your hardware. Home shows its health. Governance holds the leash.</div>
+    <div class="foot" style="margin:0"><button class="btn" onclick="go('chat')">Open chat</button></div></div>`;
+  else if(cur==='start') card=startStep(st);
+  else if(cur==='hello') card=helloStep(st);
+  else if(cur==='rules') card=stepCard('Step 3 · Look at your rules','Governance is already on. Default rules block dangerous tool calls, fail-closed. Change nothing unless you want to.',
+    `<button class="btn" onclick="SETUP.rules=true;go('governance')">See my rules</button><button class="btn ghost" onclick="SETUP.skip.rules=true;render()">Fine as-is</button>`);
+  else if(cur==='channels') card=stepCard('Step 4 · Connect a chat channel','Talk to your agent from your phone or team chat. Optional.',
+    `<button class="btn" onclick="go('access')">Set one up</button><button class="btn ghost" onclick="SETUP.skip.channels=true;render()">Not now</button>`);
+  else if(cur==='monitoring') card=stepCard('Step 5 · Turn on monitoring','See every decision the governor makes. Optional, works without it.',
+    `<button class="btn" onclick="go('access')">Turn it on</button><button class="btn ghost" onclick="SETUP.skip.monitoring=true;render()">Maybe later</button>`);
+  return `<h1>Get started</h1><p class="sub">Two required steps, three optional. Skip anything.</p>
+    <div class="rail">${rail}</div>
+    ${coreDone&&!allDone?`<div class="card" style="border-color:var(--g)"><b>You can stop here.</b>
+      <div class="mu" style="font-size:13px;margin-top:4px">Agent running, governance on, data stays on this machine. The rest is optional.</div></div>`:''}
+    ${card}`;
+}
+function stepCard(title,body,foot){
+  return `<div class="card" style="border-color:var(--ac)"><b>${title}</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 12px">${body}</div>
+    <div class="foot" style="margin:0">${foot}</div></div>`;
+}
+function startStep(st){
+  const s=st.setup||{}; const gpu=s.gpu;
+  if(st.building) return `<div class="card" style="border-color:var(--ac)"><b>Step 1 · Start your agent</b>
+    <div class="mu" style="margin-top:8px"><span class="spin"></span>Building and downloading the model…</div></div>`;
+  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen2.5:7b':m.id==='qwen2.5:1.5b');
+    return `<option value="${m.id}" ${def?'selected':''}>${m.id} · ${m.note}</option>`;}).join('');
+  return `<div class="card" style="border-color:var(--ac)"><b>Step 1 · Start your agent</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 10px">Detected: ${gpu?'<b style="color:var(--g)">GPU</b>':'<b>CPU</b>'}. Runs entirely on this machine. No account, no API key.</div>
+    <label style="font-size:13px;color:var(--hd)">Model</label>
+    <select id="su_model" style="margin:5px 0 12px">${opts}</select>
+    <div class="foot" style="margin:0"><button class="btn" onclick="setupStart()">Start agent</button></div></div>`;
+}
+async function setupStart(){
+  const m=$('#su_model').value;
+  await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
+  applyOverlay('Starting your agent (downloads the model the first time)…');
+}
+function helloStep(st){
+  const rep=SETUP.helloReply;
+  return `<div class="card" style="border-color:var(--ac)"><b>Step 2 · Say hello</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 10px">Your agent is live and governed. Ask it anything.</div>
+    ${rep?`<div class="chatlog" style="height:auto;max-height:30vh;margin-bottom:10px"><div class="msg u"><div class="who">you</div><pre>${esc(SETUP.helloMsg)}</pre></div><div class="msg"><div class="who">agent</div><pre>${esc(rep)}</pre></div></div>`:''}
+    <div class="foot" style="margin:0"><input id="su_msg" value="What can you do, and what rules are you under?" style="flex:1" ${SETUP.helloBusy?'disabled':''} onkeydown="if(event.key==='Enter')setupHello()">
+      <button class="btn" onclick="setupHello()" ${SETUP.helloBusy?'disabled':''}>${SETUP.helloBusy?'<span class="spin"></span>…':'Send'}</button></div></div>`;
+}
+async function setupHello(){
+  const msg=($('#su_msg').value||'').trim(); if(!msg||SETUP.helloBusy)return;
+  SETUP.helloMsg=msg; SETUP.helloBusy=true; render();
+  const r=await api('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg})});
+  SETUP.helloReply=r.reply||'(no reply)'; SETUP.hello=true; SETUP.helloBusy=false; render();
+}
 
 /* ---------- Connections (redesigned) ---------- */
 function accessView(st){
