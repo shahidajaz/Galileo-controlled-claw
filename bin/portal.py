@@ -82,28 +82,60 @@ def running():
 def ac_url(path):
     return f"http://127.0.0.1:{envget('AC_PORT','8181')}{path}"
 
-def ac_controls():
-    """Return the controls attached to the agent: [{name, decision, step}]."""
-    import urllib.request
+def _ac(method, path, body=None, timeout=8):
+    import urllib.request, urllib.error
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(ac_url(path), data=data, method=method,
+                                 headers={"X-API-Key": envget("AC_ADMIN_KEY"), "Content-Type": "application/json"})
     try:
-        req = urllib.request.Request(ac_url(f"/api/v1/agents/{AGENT}/controls"),
-                                     headers={"X-API-Key": envget("AC_ADMIN_KEY")})
-        with urllib.request.urlopen(req, timeout=4) as r:
-            d = json.loads(r.read().decode())
-        items = d.get("controls", d) if isinstance(d, dict) else d
-        out = []
-        for c in (items or []):
-            if not isinstance(c, dict):
-                continue
-            data = c.get("data") or {}
-            act = (data.get("action") or {})
-            scope = (data.get("scope") or {})
-            out.append({"name": c.get("name") or c.get("control_name") or "control",
-                        "decision": act.get("decision", "observe"),
-                        "step": (scope.get("step_types") or ["-"])[0]})
-        return out
-    except Exception:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode()
+            return r.status, (json.loads(raw) if raw.strip() else {})
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode())
+        except Exception:
+            return e.code, {}
+    except Exception as e:
+        return 0, {"error": str(e)}
+
+def ac_controls():
+    """Controls on the agent: [{id, name, enabled, decision, step}]. The global list has
+    the flat fields we show; for a single-agent stack these are the agent's rules."""
+    st, d = _ac("GET", "/api/v1/controls", timeout=5)
+    if st == 0 or st >= 400:
         return None
+    items = d.get("controls", d) if isinstance(d, dict) else d
+    out = []
+    for c in (items or []):
+        if not isinstance(c, dict):
+            continue
+        act = c.get("action") or {}
+        out.append({"id": c.get("id") or c.get("control_id"),
+                    "name": c.get("name") or "control",
+                    "enabled": c.get("enabled", True),
+                    "decision": act.get("decision", "observe"),
+                    "step": (c.get("step_types") or ["-"])[0]})
+    return out
+
+def ac_control_data(cid):
+    """Full definition of one control (for editing): enabled/execution/scope/condition/action.
+    The single-control GET nests the definition under 'data'."""
+    st, d = _ac("GET", f"/api/v1/controls/{cid}")
+    if st >= 400 or not isinstance(d, dict):
+        return None
+    data = d.get("data") if isinstance(d.get("data"), dict) else d
+    return {k: data.get(k) for k in ("enabled", "execution", "scope", "condition", "action") if k in data}
+
+def control_data(step, pattern, decision, steer_msg=""):
+    action = {"decision": decision}
+    if decision == "steer":
+        action["steering_context"] = {"message": steer_msg or "Please rephrase your request."}
+    return {"enabled": True, "execution": "server",
+            "scope": {"step_types": [step], "stages": ["pre"]},
+            "condition": {"selector": {"path": "input"},
+                          "evaluator": {"name": "regex", "config": {"pattern": pattern}}},
+            "action": action}
 
 def audit(where=""):
     q = ("select count(*) from control_execution_events where (data->>'matched')::bool=true"
@@ -321,6 +353,38 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/api/down":
             start_build(["bash", "down.sh"])
             return self._send(200, json.dumps({"started": True}))
+        if u.path == "/api/controls/save":
+            # create (or update) a rule and attach it to the agent. No AC login needed:
+            # the portal calls Agent Control's API with the admin key, server-side.
+            name = (d.get("name") or "").strip()
+            step = d.get("step") if d.get("step") in ("tool", "llm") else "tool"
+            pattern = d.get("pattern") or ""
+            decision = d.get("decision") if d.get("decision") in ("deny", "steer", "observe") else "deny"
+            if not name or not pattern:
+                return self._send(200, json.dumps({"ok": False, "error": "Name and a match pattern are required."}))
+            data = control_data(step, pattern, decision, d.get("steer_msg", ""))
+            cid = d.get("id")
+            if cid:
+                st, _ = _ac("PUT", f"/api/v1/controls/{cid}/data", {"data": data})
+            else:
+                st, b = _ac("PUT", "/api/v1/controls", {"name": name, "data": data})
+                cid = b.get("control_id") if isinstance(b, dict) else None
+                if cid:
+                    _ac("POST", f"/api/v1/agents/{AGENT}/controls/{cid}")
+            return self._send(200, json.dumps({"ok": st and st < 400, "id": cid}))
+        if u.path == "/api/controls/toggle":
+            cid = d.get("id")
+            cur = ac_control_data(cid)
+            if cur is None:
+                return self._send(200, json.dumps({"ok": False, "error": "control not found"}))
+            cur["enabled"] = bool(d.get("enabled"))
+            st, _ = _ac("PUT", f"/api/v1/controls/{cid}/data", {"data": cur})
+            return self._send(200, json.dumps({"ok": bool(st and st < 400)}))
+        if u.path == "/api/controls/delete":
+            cid = d.get("id")
+            _ac("DELETE", f"/api/v1/agents/{AGENT}/controls/{cid}")   # detach
+            st, _ = _ac("DELETE", f"/api/v1/controls/{cid}")           # remove
+            return self._send(200, json.dumps({"ok": True}))
         if u.path == "/api/chat":
             return self._send(200, json.dumps({"reply": chat_agent(d.get("message", ""))}))
         if u.path == "/api/webex/save":

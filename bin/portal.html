@@ -223,19 +223,50 @@ async function saveAccess(){
 function governanceView(st){
   const cs=st.controls;
   const rows=cs===null?`<div class="mu" style="padding:8px 0">Agent Control is not reachable. Start the stack from Home.</div>`
-    :cs.length===0?`<div class="mu" style="padding:8px 0">No controls attached yet. They seed automatically when the stack starts.</div>`
-    :cs.map(c=>`<div class="svc"><i class="dot ${c.decision==='deny'?'up':c.decision==='steer'?'warn':'down'}"></i>
-       <span class="nm">${esc(c.name)}</span>
+    :cs.length===0?`<div class="mu" style="padding:8px 0">No rules yet. Add one below.</div>`
+    :cs.map(c=>`<div class="svc"><i class="dot ${c.decision==='deny'?'up':c.decision==='steer'?'warn':'down'}" title="${c.enabled?'active':'disabled'}"></i>
+       <span class="nm" style="${c.enabled?'':'opacity:.5'}">${esc(c.name)}</span>
        <span class="tag ${esc(c.decision)}">${esc(c.decision)}</span>
-       <span class="st">${esc(c.step)}</span></div>`).join('');
+       <span class="st">${c.step==='llm'?'prompt':'tool'}</span>
+       <label class="sw" style="transform:scale(.82)" title="${c.enabled?'on':'off'}"><input type="checkbox" ${c.enabled?'checked':''} onchange="toggleControl('${c.id}',this.checked)"><span class="tk"></span></label>
+       <button class="btn ghost sm" onclick="deleteControl('${c.id}',${JSON.stringify(esc(c.name))})">Delete</button></div>`).join('');
+  const editable = cs!==null;
   return `<h1>Governance</h1>
-    <p class="sub">Every tool call and model turn is checked against these rules before it runs. Fail-closed: if the governor is down, actions are blocked.</p>
-    <div class="gov-line"><i class="dot up"></i> Governance is always on. These rules are enforced by Agent Control on every action.</div>
+    <p class="sub">The rules every tool call and model turn is checked against. Fail-closed: if the governor is down, actions are blocked. Edit them right here, no separate login.</p>
+    <div class="gov-line"><i class="dot up"></i> Governance is always on. Changes apply immediately.</div>
     <div class="stat"><b>${st.gov.decisions??'·'}</b><span>decisions logged</span></div>
     <div class="stat"><b>${st.gov.blocked??'·'}</b><span>blocked</span></div>
-    <h2>Active controls</h2>
+    <h2>Rules</h2>
     <div class="card">${rows}</div>
-    <p class="sub" style="margin-top:10px">Add, edit, or remove rules live in the Agent Control UI: <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a>. Changes apply immediately, no restart.</p>`;
+    ${editable?`<h2>Add a rule</h2>
+    <div class="card">
+      <div class="cx-field"><label>Name</label><input id="rc_name" placeholder="e.g. block-secrets"></div>
+      <div class="row" style="gap:10px">
+        <div class="cx-field" style="flex:1"><label>Applies to</label><select id="rc_step"><option value="tool">Tool calls</option><option value="llm">Model prompts</option></select></div>
+        <div class="cx-field" style="flex:1"><label>Action</label><select id="rc_dec" onchange="var w=$('#rc_steerwrap');if(w)w.style.display=this.value==='steer'?'block':'none'"><option value="deny">Block</option><option value="steer">Steer</option><option value="observe">Log only</option></select></div>
+      </div>
+      <div class="cx-field"><label>Match (regular expression)</label><input id="rc_pat" placeholder="(?i)password|secret|api[_-]?key">
+        <div class="cx-help">If the tool input or prompt matches this, the action fires. Case-insensitive: start the pattern with (?i).</div></div>
+      <div class="cx-field" id="rc_steerwrap" style="display:none"><label>Steer message</label><input id="rc_steer" placeholder="Please rephrase without sensitive data."></div>
+      <div class="foot" style="margin-top:2px"><button class="btn" onclick="saveControl()">Add rule</button></div>
+    </div>`:''}
+    <p class="sub" style="margin-top:10px">Prefer the raw vendor console? It is on the <a class="ac" onclick="go('control')">Agent Control</a> tab.</p>`;
+}
+async function saveControl(){
+  const b={name:($('#rc_name').value||'').trim(),step:$('#rc_step').value,decision:$('#rc_dec').value,
+    pattern:($('#rc_pat').value||'').trim(),steer_msg:($('#rc_steer')&&$('#rc_steer').value)||''};
+  if(!b.name||!b.pattern){toast('Give it a name and a match pattern');return;}
+  const r=await api('/api/controls/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});
+  if(r.ok){toast('Rule added');loadState();}else toast(r.error||'Could not add the rule');
+}
+async function toggleControl(id,on){
+  await api('/api/controls/toggle',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,enabled:on})});
+  loadState();
+}
+async function deleteControl(id,name){
+  if(!confirm('Delete rule "'+name+'"?'))return;
+  await api('/api/controls/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
+  toast('Rule deleted');loadState();
 }
 
 /* ---------- Agent Control (embedded console) ---------- */
