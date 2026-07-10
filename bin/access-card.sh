@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints a clean access card for the stack: every endpoint, token, and next step.
-# Reads .env by key (never sources it — values like WEBEX_SCOPES have spaces).
+# Reads .env by key (never sources it - values like WEBEX_SCOPES have spaces).
 # Safe to run anytime:  ./bin/access-card.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -27,7 +27,7 @@ echo "  ╔═══════════════════════
 echo "  ║   openclaw-governed  ·  access card                          ║"
 echo "  ╚══════════════════════════════════════════════════════════════╝"
 echo
-echo "  ENDPOINTS   (bound to 127.0.0.1 — SSH-tunnel to reach remotely)"
+echo "  ENDPOINTS   (bound to 127.0.0.1 - SSH-tunnel to reach remotely)"
 row "OpenClaw"   "http://127.0.0.1:${GW}"
 row ""           "gateway token: $(v GATEWAY_TOKEN)"
 row "Agent Ctrl" "http://127.0.0.1:${AC_PORT}"
@@ -50,7 +50,7 @@ echo "  CHANNELS & TOOLS"
 TG_ALLOW="$(v TELEGRAM_ALLOW)"
 row "Telegram" "$(on TELEGRAM_BOT_TOKEN && echo "${TG_HANDLE}  ·  allowed id(s): ${TG_ALLOW:-<pairing>}" || echo "off")"
 if on WEBEX_CLIENT_ID; then
-  row "Webex" "configured — authorize once:"
+  row "Webex" "configured - authorize once:"
   row "" "docker compose exec openclaw node /root/openclaw-webex/oauth-setup.mjs url"
 else
   row "Webex" "off"

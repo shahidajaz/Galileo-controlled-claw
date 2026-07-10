@@ -226,7 +226,7 @@ esac; }
 val() { case "$1" in
   model) echo "$(cur LLM_MODEL) · $(cleanurl "$(cur LLM_BASE_URL)") · ctx $(humanctx "$(cur LLM_CONTEXT_WINDOW)")";;
   gov)   [ "$(cur GOVERNANCE_ENABLED)" = true ] && echo "ENFORCING · fail-closed · 5 starter controls (edit live at :$(curdef AC_PORT 8181))" || echo "${DIM}off (running raw, no guardrails)${R}";;
-  galileo) [ -n "$(cur GALILEO_API_KEY)" ] && echo "project ${B}$(cur GALILEO_PROJECT)${R} — your LLM traces + scores land here" || echo "${DIM}off (no LLM tracing)${R}";;
+  galileo) [ -n "$(cur GALILEO_API_KEY)" ] && echo "project ${B}$(cur GALILEO_PROJECT)${R} - your LLM traces + scores land here" || echo "${DIM}off (no LLM tracing)${R}";;
   splunk)
     local h o; h="$(cur SPLUNK_HEC_URL)"; o="$(cur SPLUNK_O11Y_REALM)"
     if [ -n "$h" ] && [ -n "$o" ]; then echo "events → HEC (index $(cur SPLUNK_INDEX)) · metrics → o11y (realm $o)"
@@ -235,7 +235,7 @@ val() { case "$1" in
     else echo "${DIM}off (no Splunk)${R}"; fi;;
   telegram) [ -n "$(cur TELEGRAM_BOT_TOKEN)" ] && echo "bot configured · only id(s) $(cur TELEGRAM_ALLOW) may chat" || echo "${DIM}off${R}";;
   addch) echo "${DIM}Slack · Discord · WhatsApp · Signal · Teams … (add a way in)${R}";;
-  webex) [ -n "$(cur WEBEX_CLIENT_ID)" ] && echo "Webex triage tools (spaces, messages, transcripts) — governed" || echo "${DIM}off${R}";;
+  webex) [ -n "$(cur WEBEX_CLIENT_ID)" ] && echo "Webex triage tools (spaces, messages, transcripts) - governed" || echo "${DIM}off${R}";;
   addtool) echo "${DIM}official plugin · MCP server · custom (add a capability)${R}";;
 esac; }
 
@@ -244,7 +244,7 @@ MENU=(
   "I:model:Model"
   "H:GOVERNANCE:every tool call and model turn is checked, fail-closed"
   "I:gov:Agent Control"
-  "H:OBSERVABILITY:optional — where traces, metrics and events go"
+  "H:OBSERVABILITY:optional - where traces, metrics and events go"
   "I:galileo:Galileo"
   "I:splunk:Splunk"
   "H:CHANNELS:how people reach the agent"

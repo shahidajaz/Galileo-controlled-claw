@@ -39,14 +39,6 @@ services:
       AGENT_CONTROL_API_KEYS: "${AC_API_KEY}"
       AGENT_CONTROL_ADMIN_API_KEYS: "${AC_ADMIN_KEY}"
       AGENT_CONTROL_SESSION_SECRET: "${AC_SESSION_SECRET}"
-      # Cisco AI Defense evaluator (OFF by default). Blank = the evaluator is never
-      # used. Set CISCO_AI_DEFENSE_API_KEY in .env + run cisco/enable.sh to turn on.
-      # WARNING: when on, governed content egresses to Cisco's cloud inspect API.
-      AI_DEFENSE_API_KEY: "${CISCO_AI_DEFENSE_API_KEY:-}"
-      # DefenseClaw local evaluator (OFF by default). Same pattern, but LOCAL (no
-      # egress). Set DEFENSECLAW_ENABLED=true + run defenseclaw/enable.sh to turn on.
-      DEFENSECLAW_TOKEN: "${DEFENSECLAW_TOKEN:-}"
-      DEFENSECLAW_BASE_URL: "${DEFENSECLAW_BASE_URL:-http://host.docker.internal:18970}"
     restart: unless-stopped
 
   # --- OpenClaw: the governed agent (gateway + Galileo forwarder baked in) -----
@@ -156,7 +148,7 @@ services:
     profiles: ["splunk"]
     environment:
       SPLUNK_START_ARGS: "--accept-license"
-      SPLUNK_PASSWORD: "${SPLUNK_PASSWORD:?set SPLUNK_PASSWORD in .env}"
+      SPLUNK_PASSWORD: "${SPLUNK_PASSWORD:-changeme-splunk-admin}"
       SPLUNK_HEC_TOKEN: "${SPLUNK_HEC_TOKEN}"
     ports: ["127.0.0.1:${SPLUNK_PORT:-8090}:8000"]
     volumes: ["splunkvar:/opt/splunk/var", "splunketc:/opt/splunk/etc"]
@@ -193,8 +185,8 @@ services:
     environment:
       PG_HOST: "postgres"
       PG_PASSWORD: "${AC_PG_PASSWORD}"
-      SPLUNK_O11Y_REALM: "${SPLUNK_O11Y_REALM:?set SPLUNK_O11Y_REALM in .env}"
-      SPLUNK_O11Y_TOKEN: "${SPLUNK_O11Y_TOKEN:?set SPLUNK_O11Y_TOKEN in .env}"
+      SPLUNK_O11Y_REALM: "${SPLUNK_O11Y_REALM:-}"
+      SPLUNK_O11Y_TOKEN: "${SPLUNK_O11Y_TOKEN:-}"
       STATE_FILE: "/state/.o11y_last_ts"
     volumes: ["fwdstate:/state"]
     restart: unless-stopped
