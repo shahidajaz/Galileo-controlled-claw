@@ -131,9 +131,18 @@ function homeView(st){
   return `<h1>Home</h1><p class="sub">One governed OpenClaw agent. ${up?'Running now.':'Not running.'} Governance is ${g.enabled?'ON':'OFF'}${g.fail_closed?', fail-closed':''}.</p>
     ${up?statsRow(st):quickStart(st)}
     <h2>The stack</h2><div class="card">${rows}</div>
-    ${up?`<div class="foot"><button class="btn ghost" onclick="lifecycle('down','Stopping the stack…')">Stop</button>
-       <button class="btn ghost" onclick="lifecycle('up','Rebuilding + restarting…')">Rebuild</button></div>`:''}
-    <p class="sub" style="margin-top:12px">Agent Control policy UI (advanced): <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a></p>`;
+    ${up?`<div class="foot"><button class="btn ghost" onclick="lifecycle('up','Rebuilding + restarting…')">Rebuild</button></div>`:''}
+    <h2>Tear down</h2>
+    <div class="foot" style="margin-top:0">
+      <button class="btn ghost" onclick="teardown('stop')">Stop</button>
+      <button class="btn ghost" onclick="teardown('reset')">Reset</button>
+      <button class="btn ghost" onclick="teardown('wipe')">Wipe all</button>
+    </div>
+    <div class="mu" style="font-size:12px;margin-top:7px;line-height:1.7">
+      <b>Stop</b>: keep everything, restart is instant.<br>
+      <b>Reset</b>: clear data (governance, memory, creds), keep the model.<br>
+      <b>Wipe all</b>: delete everything, including the downloaded model.</div>
+    <p class="sub" style="margin-top:14px">Agent Control policy UI (advanced): <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a></p>`;
 }
 function statsRow(st){const g=st.gov;
   return `<div>
@@ -163,6 +172,15 @@ async function quickstart(){const m=$('#qsmodel').value;
   await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
   applyOverlay('Downloading '+m+' + building the agent (first time is slow)…');}
 async function lifecycle(which,title){await api('/api/'+which,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});applyOverlay(title);}
+async function teardown(mode){
+  const msg={stop:'Stop the stack? Everything is kept, restart is instant.',
+    reset:'Reset? Clears governance data, agent memory and credentials. The downloaded model is kept.',
+    wipe:'Wipe everything, including the downloaded model? This cannot be undone.'}[mode];
+  if(!confirm(msg))return;
+  SETUP.ready=false; SETUP.hello=false; SETUP.build={phase:'idle',lines:[],n:0,err:''}; SETUP.skip={};
+  await api('/api/down',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode})});
+  applyOverlay({stop:'Stopping…',reset:'Resetting (clearing state, keeping the model)…',wipe:'Wiping everything…'}[mode]);
+}
 
 /* ---------- Get started (guided setup, ADHD-friendly) ---------- */
 function setupStatus(st){

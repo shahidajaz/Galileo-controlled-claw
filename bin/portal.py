@@ -371,7 +371,8 @@ class H(BaseHTTPRequestHandler):
             start_build(["bash", "up.sh"])
             return self._send(200, json.dumps({"started": True}))
         if u.path == "/api/down":
-            start_build(["bash", "down.sh"])
+            flag = {"stop": "--stop", "reset": "--reset", "wipe": "--wipe"}.get(d.get("mode"), "--stop")
+            start_build(["bash", "down.sh", flag])
             return self._send(200, json.dumps({"started": True}))
         if u.path == "/api/controls/save":
             # create (or update) a rule and attach it to the agent. No AC login needed:
