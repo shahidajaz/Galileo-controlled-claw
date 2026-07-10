@@ -174,9 +174,27 @@ def state():
              "configured": bool(envget("LLM_MODEL")) and bool(base),
              "recommended": RECMODELS,
              "downloaded": ollama_models() if (local and "ollama" in run) else []}
-    return {"stack": stack, "gov": gov, "access": access, "controls": ac_controls(),
+    controls = ac_controls()
+    core_up = all(stack.get(s) for s in ("postgres", "server", "llm-proxy", OC_SERVICE))
+    return {"stack": stack, "gov": gov, "access": access, "controls": controls,
             "webex": webex, "llm": {"model": envget("LLM_MODEL"), "base": base}, "setup": setup,
+            "ready": bool(core_up and controls is not None),
             "ac_port": envget("AC_PORT", "8181"), "building": BUILD["running"]}
+
+def agent_ready():
+    """Honest readiness: core containers up, governor healthy, and the agent actually
+    answers a warm-up message (which also loads the model). Slow, call once."""
+    run = running()
+    if not all(s in run for s in ("postgres", "server", "llm-proxy", OC_SERVICE)):
+        return {"ready": False, "phase": "starting"}
+    try:
+        import urllib.request
+        urllib.request.urlopen(ac_url("/health"), timeout=3)
+    except Exception:
+        return {"ready": False, "phase": "governor"}
+    reply = chat_agent("Reply with just: ok")
+    ok = bool(reply) and not reply.startswith("(")
+    return {"ready": ok, "phase": "ready" if ok else "model"}
 
 # ---------- chat ----------
 def clean_reply(out):
@@ -318,6 +336,8 @@ class H(BaseHTTPRequestHandler):
                                                 "running": BUILD["running"], "ok": BUILD["ok"]}))
         if u.path == "/api/webex/authurl":
             return self._send(200, json.dumps({"url": webex_authorize_url()}))
+        if u.path == "/api/ready":
+            return self._send(200, json.dumps(agent_ready()))
         return self._send(404, "{}")
 
     def do_POST(self):
