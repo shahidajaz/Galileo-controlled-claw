@@ -298,8 +298,14 @@ def cred_test(item, d):
                     json.loads(r.read().decode())
                     return {"ok": True, "msg": f"Key works. {model or 'the model'} replied."}
             except urllib.error.HTTPError as e:
-                if e.code in (401, 403):
-                    return {"ok": False, "msg": f"The key was rejected (HTTP {e.code}). Recheck it."}
+                if e.code == 401:
+                    return {"ok": False, "msg": "The key was rejected (HTTP 401). Recheck it."}
+                if e.code == 403:
+                    # 403 from here is usually a network/proxy/policy block on THIS machine,
+                    # not the key. The agent reaches the provider by a different path (the
+                    # container), so it can still work. Don't scare the user off Launch.
+                    return {"ok": None, "msg": "Could not verify from this machine (HTTP 403), "
+                            "often a local proxy or firewall. Your key may still be fine, try Launch."}
                 if e.code == 404:
                     return {"ok": False, "msg": f"Model '{model}' not found (HTTP 404). Check the model name."}
                 try:
