@@ -196,7 +196,16 @@ const server = http.createServer((req, res) => {
     // this only changes HOW the model is reached, not whether it is governed.
     const isOllama = /ollama|:11434/.test(UPSTREAM);
     if (isChat && reqJson && /qwen/i.test(reqJson.model || "") && isOllama) {
-      const nb = { model: reqJson.model, messages: reqJson.messages, think: false, stream: false, options: {} };
+      // Ollama's native /api/chat wants content as a STRING; OpenClaw sends OpenAI-style
+      // array content ([{type:"text",text:...}]), which native reads as empty. Flatten it.
+      const nmsgs = (reqJson.messages || []).map((m) => {
+        const o = { role: (m.role === "toolResult" || m.role === "function") ? "tool" : m.role, content: textOf(m.content) };
+        if (m.tool_calls) o.tool_calls = m.tool_calls;
+        if (m.tool_call_id) o.tool_call_id = m.tool_call_id;
+        if (m.name) o.name = m.name;
+        return o;
+      });
+      const nb = { model: reqJson.model, messages: nmsgs, think: false, stream: false, options: {} };
       if (reqJson.max_tokens) nb.options.num_predict = reqJson.max_tokens;
       if (typeof reqJson.temperature === "number") nb.options.temperature = reqJson.temperature;
       if (reqJson.tools) nb.tools = reqJson.tools;
