@@ -188,6 +188,25 @@ const server = http.createServer((req, res) => {
       }
     }
 
+    // Qwen3/3.5 keep emitting reasoning even when the runtime asks for none; on a small
+    // model that burns the whole output budget "thinking" and returns an EMPTY answer
+    // (stopReason "length", no text). The /no_think soft switch turns it off. We add it
+    // both as a leading system message and appended to the last user turn (the two places
+    // Qwen templates look). Gated to qwen models, so it is a no-op for any other model.
+    if (isChat && reqJson && /qwen/i.test(reqJson.model || "") && Array.isArray(reqJson.messages)) {
+      const msgs = reqJson.messages;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === "user") {
+          const c = msgs[i].content;
+          if (typeof c === "string") msgs[i] = { ...msgs[i], content: c + " /no_think" };
+          else if (Array.isArray(c)) msgs[i] = { ...msgs[i], content: [...c, { type: "text", text: " /no_think" }] };
+          break;
+        }
+      }
+      reqJson.messages = [{ role: "system", content: "/no_think" }, ...msgs];
+      forwardBody = Buffer.from(JSON.stringify(reqJson));
+    }
+
     // forward to the real model
     const url = UPSTREAM + req.url.replace(/^\/v1/, "");
     let upstream;
