@@ -18,13 +18,13 @@ AGENT = "openclaw-agent:main"
 OC_SERVICE = "openclaw"                       # the single agent's compose service
 PORT = int(os.environ.get("PORTAL_PORT", "8891"))
 
-# Recommended local models, tagged by what hardware they suit.
+# Recommended local models, tagged by what hardware they suit. Default is qwen3.5:4b.
 RECMODELS = [
-    {"id": "qwen2.5:1.5b", "note": "~1 GB, fast, great on CPU", "tier": "cpu"},
-    {"id": "qwen2.5:3b",   "note": "~2 GB, smarter, OK on CPU", "tier": "cpu"},
-    {"id": "llama3.2:3b",  "note": "~2 GB, general purpose",    "tier": "cpu"},
-    {"id": "qwen2.5:7b",   "note": "~4.7 GB, best quality, GPU recommended", "tier": "gpu"},
+    {"id": "qwen3.5:2b", "note": "~1.5 GB, fast, great on CPU", "tier": "cpu"},
+    {"id": "qwen3.5:4b", "note": "~3.4 GB, best all-round (default)", "tier": "any"},
+    {"id": "qwen3.5:9b", "note": "~5.5 GB, strongest, GPU recommended", "tier": "gpu"},
 ]
+DEFAULT_MODEL = "qwen3.5:4b"
 
 _GPU = None
 def has_gpu():
@@ -293,6 +293,60 @@ def webex_disconnect():
         pass
     return {"ok": True}
 
+# ---------- credential tests (best-effort, reachable checks only) ----------
+def cred_test(item, d):
+    """Test one credential set passed from the setup page. Returns {ok, msg}.
+    ok True = verified, False = failed, None = cannot cheaply test (honest)."""
+    import urllib.request, urllib.error
+    try:
+        if item == "model":
+            base = (d.get("base") or "").strip()
+            if not base or "ollama" in base:
+                return {"ok": None, "msg": "Bundled local model. It downloads and verifies at launch."}
+            probe = base.replace("host.docker.internal", "localhost").rstrip("/") + "/models"
+            try:
+                with urllib.request.urlopen(probe, timeout=6) as r:
+                    ids = [x.get("id") for x in json.loads(r.read().decode()).get("data", [])][:6]
+                    return {"ok": True, "msg": "Endpoint OK." + (" Found: " + ", ".join(ids) if ids else "")}
+            except Exception:
+                return {"ok": False, "msg": f"No response at {base}. Is the server running?"}
+        if item == "telegram":
+            tok = (d.get("token") or "").strip()
+            if not tok:
+                return {"ok": False, "msg": "Enter a bot token first."}
+            try:
+                with urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/getMe", timeout=6) as r:
+                    js = json.loads(r.read().decode())
+                if js.get("ok"):
+                    return {"ok": True, "msg": f"Bot @{js['result']['username']} authenticates."}
+            except urllib.error.HTTPError:
+                pass
+            return {"ok": False, "msg": "Telegram rejected this token. Recopy it from @BotFather."}
+        if item == "o11y":
+            realm = (d.get("realm") or "").strip(); tok = (d.get("token") or "").strip()
+            if not (realm and tok):
+                return {"ok": False, "msg": "Enter a region and access token."}
+            req = urllib.request.Request(f"https://ingest.{realm}.signalfx.com/v2/datapoint",
+                data=json.dumps({"counter": [{"metric": "openclaw.setup.test", "value": 1}]}).encode(),
+                headers={"X-SF-Token": tok, "Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req, timeout=6)
+                return {"ok": True, "msg": f"Region {realm} accepts (HTTP 200)."}
+            except urllib.error.HTTPError as e:
+                return {"ok": False, "msg": f"Region {realm} rejected (HTTP {e.code}). Check the token."}
+        if item == "splunk":
+            url = (d.get("url") or "").strip()
+            if not url:
+                return {"ok": False, "msg": "Enter the HEC endpoint URL."}
+            return {"ok": None, "msg": "HEC is validated at launch (it may only resolve inside the stack)."}
+        if item == "galileo":
+            return {"ok": None, "msg": "Galileo verifies the key on your first trace after launch."}
+        if item == "webex":
+            return {"ok": None, "msg": "You authorize Webex once after launch, one click from the dashboard."}
+    except Exception as e:
+        return {"ok": False, "msg": f"Test failed: {e}"}
+    return {"ok": None, "msg": "Nothing to test for this item."}
+
 # ---------- lifecycle jobs (streamed log) ----------
 BUILD = {"lines": [], "running": False, "ok": None}
 
@@ -372,12 +426,19 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"started": True}))
         if u.path == "/api/quickstart":
             # one click: point the agent at the bundled Ollama, pick a model, build + pull + start
-            m = (d.get("model") or ("qwen2.5:7b" if has_gpu() else "qwen2.5:1.5b")).strip()
+            m = (d.get("model") or DEFAULT_MODEL).strip()
             setenv("LLM_BASE_URL", "http://ollama:11434/v1")
             setenv("LLM_MODEL", m)
             setenv("LLM_API_KEY", "unused")
             start_build(["bash", "up.sh"])
             return self._send(200, json.dumps({"started": True, "model": m}))
+        if u.path == "/api/model":
+            setenv("LLM_BASE_URL", (d.get("base") or "http://ollama:11434/v1").strip())
+            setenv("LLM_MODEL", (d.get("model") or "").strip())
+            setenv("LLM_API_KEY", (d.get("key") or "unused").strip())
+            return self._send(200, json.dumps({"ok": True}))
+        if u.path == "/api/test":
+            return self._send(200, json.dumps(cred_test(d.get("item"), d)))
         if u.path == "/api/up":
             start_build(["bash", "up.sh"])
             return self._send(200, json.dumps({"started": True}))

@@ -30,6 +30,11 @@ h2{font-size:16px;margin:22px 0 8px}
 .btn:hover{filter:brightness(1.07)}.btn:disabled{opacity:.55;cursor:default}
 .btn.ghost{background:transparent;border:1px solid var(--line2);color:var(--ink);font-weight:500}
 .btn.sm{padding:6px 11px;font-size:13px}
+.seg{display:flex;margin:0 0 12px;border:1px solid var(--line2);border-radius:8px;overflow:hidden;width:fit-content}
+.seg button{background:transparent;border:0;color:var(--mu);padding:7px 14px;font-size:13px}
+.seg button.on{background:var(--acbg);color:var(--ink);font-weight:600}
+.tchip{font-size:12.5px;margin-left:8px;vertical-align:middle}
+.tchip.ok{color:var(--g)}.tchip.bad{color:var(--rd)}.tchip.info{color:var(--mu)}
 .foot{display:flex;gap:10px;margin-top:18px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:12px}
 .kv{display:flex;gap:12px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
@@ -100,13 +105,15 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 <script>
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const S={view:'home',state:null};
-const NAV=[['start','Get started'],['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
+const S={view:null,state:null};
+const NAV=[['start','Set up'],['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
 const CHAT={msgs:[],busy:false};
-const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
+const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',endpoint:'bundled',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
 
 async function api(path,opts){const r=await fetch(path,opts);return r.json();}
-async function loadState(){S.state=await api('/api/state');render();}
+async function loadState(){S.state=await api('/api/state');
+  if(S.view===null)S.view=S.state.ready?'home':'start';  // land on Set up until the agent is up
+  render();}
 function go(v){S.view=v;render();}
 function toast(m){const t=$('#toast');t.textContent=m;t.className='toast show';clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3500);}
 
@@ -154,7 +161,7 @@ function statsRow(st){const g=st.gov;
 }
 function quickStart(st){
   const s=st.setup||{}; const gpu=s.gpu;
-  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen2.5:7b':m.id==='qwen2.5:1.5b');
+  const opts=(s.recommended||[]).map(m=>{const def=(m.id==='qwen3.5:4b');
     const have=(s.downloaded||[]).some(x=>x===m.id||x.startsWith(m.id));
     return `<option value="${m.id}" ${def?'selected':''}>${m.id} &middot; ${m.note}${have?' (downloaded)':''}</option>`;}).join('');
   return `<div class="card" style="border-color:var(--ac)">
@@ -214,7 +221,7 @@ function setupView(st){
     `<button class="btn" onclick="go('access')">Set one up</button><button class="btn ghost" onclick="SETUP.skip.channels=true;render()">Not now</button>`);
   else if(cur==='monitoring') card=stepCard('Step 5 · Turn on monitoring','See every decision the governor makes. Optional, works without it.',
     `<button class="btn" onclick="go('access')">Turn it on</button><button class="btn ghost" onclick="SETUP.skip.monitoring=true;render()">Maybe later</button>`);
-  return `<h1>Get started</h1><p class="sub">Two required steps, three optional. Skip anything.</p>
+  return `<h1>Set up your governed agent</h1><p class="sub">Configure once, launch, then manage everything live from the dashboard.</p>
     <div class="rail">${rail}</div>
     ${coreDone&&!allDone?`<div class="card" style="border-color:var(--g)"><b>You can stop here.</b>
       <div class="mu" style="font-size:13px;margin-top:4px">Agent running, governance on, data stays on this machine. The rest is optional.</div></div>`:''}
@@ -233,14 +240,28 @@ function startStep(st){
   if(b==='error') return `<div class="card" style="border-color:var(--rd)"><b>That did not work, and it is not your fault.</b>
     <div class="mu" style="font-size:13px;margin:6px 0 10px">${esc(SETUP.build.err||'The build stopped.')}</div>
     <div class="foot" style="margin:0"><button class="btn" onclick="setupStart(true)">Retry</button></div></div>`;
-  const s=st.setup||{}; const gpu=s.gpu;
-  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen2.5:7b':m.id==='qwen2.5:1.5b');
+  const s=st.setup||{}; const gpu=s.gpu; const own=SETUP.endpoint==='own';
+  const opts=(s.recommended||[]).map(m=>{const def=(m.id==='qwen3.5:4b');
     return `<option value="${m.id}" ${def?'selected':''}>${m.id} · ${m.note}</option>`;}).join('');
-  return `<div class="card" style="border-color:var(--ac)"><b>Step 1 · Start your agent</b>
-    <div class="mu" style="font-size:13px;margin:6px 0 10px">Detected: ${gpu?'<b style="color:var(--g)">GPU</b>':'<b>CPU</b>'}. Runs entirely on this machine. No account, no API key.</div>
-    <label style="font-size:13px;color:var(--hd)">Model</label>
-    <select id="su_model" style="margin:5px 0 12px">${opts}</select>
-    <div class="foot" style="margin:0"><button class="btn" onclick="setupStart()">Start agent</button></div></div>`;
+  const seg=`<div class="seg"><button class="${own?'':'on'}" onclick="SETUP.endpoint='bundled';render()">Bundled local model</button><button class="${own?'on':''}" onclick="SETUP.endpoint='own';render()">My own endpoint</button></div>`;
+  const bundled=`<label style="font-size:13px;color:var(--hd)">Model</label>
+    <select id="su_model" style="margin:5px 0 4px">${opts}</select>
+    <div class="cx-help" style="margin-bottom:10px">No keys. Runs on this machine${gpu?' <b style="color:var(--g)">with your GPU</b>':' on the CPU'}. Downloads on first launch.</div>`;
+  const ownf=`<div class="cx-field"><label>Base URL</label><input id="su_base" placeholder="https://api.openai.com/v1" value="${esc((st.llm&&st.llm.base&&!s.local)?st.llm.base:'')}"><div class="cx-help">Any OpenAI-compatible endpoint (your vLLM, OpenAI, etc).</div></div>
+    <div class="cx-field"><label>Model name</label><input id="su_omodel" placeholder="gpt-4o-mini" value="${esc((!s.local&&st.llm&&st.llm.model)?st.llm.model:'')}"></div>
+    <div class="cx-field"><label>API key</label><input id="su_key" type="password" placeholder="type unused for a local endpoint"></div>
+    <div class="foot" style="margin:0 0 8px"><button type="button" class="btn ghost sm" onclick="testModel()">Test</button><span id="su_test" class="tchip"></span></div>`;
+  return `<div class="card" style="border-color:var(--ac)"><b>Step 1 &middot; Start your agent</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 10px">Pick where the model runs. The bundled option needs nothing.</div>
+    ${seg}
+    ${own?ownf:bundled}
+    <div class="foot" style="margin:0"><button class="btn" onclick="setupStart()">Launch</button></div></div>`;
+}
+async function testModel(){
+  const base=($('#su_base')&&$('#su_base').value||'').trim(), model=($('#su_omodel')&&$('#su_omodel').value||'').trim();
+  const chip=$('#su_test'); if(chip){chip.className='tchip info';chip.textContent='Testing…';}
+  const r=await api('/api/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({item:'model',base,model})});
+  if(chip){chip.className='tchip '+(r.ok===true?'ok':r.ok===false?'bad':'info');chip.textContent=r.msg||'';}
 }
 function buildStages(){
   const L=SETUP.build.lines.join('\n'); let stage=1, pct=null;
@@ -255,7 +276,7 @@ function buildingCard(){
   const rows=[['Build images',1],['Download model',2],['Load model and start governor',3],['Final check',4]].map(([label,n])=>{
     const stt=n<stage?'done':n===stage?'cur':'todo';
     const icon=stt==='done'?'<i class="dot up"></i>':stt==='cur'?'<span class="spin"></span>':'<i class="dot down"></i>';
-    const right=(n===2&&stt==='cur'&&pct!=null)?`${pct}% of 4.7 GB`:stt==='done'?'done':n===4&&stt==='cur'?'asking the agent':'';
+    const right=(n===2&&stt==='cur'&&pct!=null)?`${pct}% of 3.4 GB`:stt==='done'?'done':n===4&&stt==='cur'?'asking the agent':'';
     const bar=(n===2&&stt==='cur'&&pct!=null)?`<div class="pbar"><div style="width:${pct}%"></div></div>`:'';
     return `<div class="svc" style="border-top:0;padding:5px 0">${icon}<span class="nm">${label}</span><span class="st">${right}</span></div>${bar}`;
   }).join('');
@@ -266,8 +287,18 @@ function buildingCard(){
       <button class="btn ghost" onclick="setupStop()">Stop</button></div></div>`;
 }
 async function setupStart(retry){
+  if(SETUP.endpoint==='own' && !retry){
+    const base=($('#su_base')&&$('#su_base').value||'').trim();
+    const model=($('#su_omodel')&&$('#su_omodel').value||'').trim();
+    const key=($('#su_key')&&$('#su_key').value||'').trim();
+    if(!base||!model){toast('Enter a base URL and a model name');return;}
+    SETUP.build={phase:'building',lines:[],n:0,err:''}; render();
+    await api('/api/model',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({base,model,key})});
+    await api('/api/up',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+    setupPoll(); return;
+  }
   const el=$('#su_model');
-  SETUP.model=(el&&el.value)||SETUP.model||((S.state.setup&&S.state.setup.gpu)?'qwen2.5:7b':'qwen2.5:1.5b');
+  SETUP.model=(el&&el.value)||SETUP.model||'qwen3.5:4b';
   SETUP.build={phase:'building',lines:[],n:0,err:''}; render();
   await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:SETUP.model})});
   setupPoll();
@@ -308,6 +339,7 @@ async function setupHello(){
 /* ---------- Connections (redesigned) ---------- */
 function accessView(st){
   const a=st.access;const v=(x)=>esc(x||'');
+  const TEST={tg:1,gl:1,o11y:1,sp:1};
   const REALMS=['','us0','us1','us2','eu0','eu1','au0','jp0'];
   const realmOpts=REALMS.map(r=>`<option value="${r}" ${a.o11y.realm===r?'selected':''}>${r||'region'}</option>`).join('');
   const chip=(on,creds)=>on?`<span class="cx-chip"><i class="dot up"></i>Active</span>`
@@ -323,7 +355,7 @@ function accessView(st){
        <span id="cxchip_${id}">${chip(on,creds)}</span>
        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" id="on_${id}" ${on?'checked':''} onchange="cxToggle('${id}',this.checked)"><span class="tk"></span></label>
      </div>
-     <div class="cx-body">${body}</div></div>`;
+     <div class="cx-body">${body}${TEST[id]?`<div class="foot" style="margin:2px 0 0"><button type="button" class="btn ghost sm" onclick="cxTest('${id}')">Test</button><span id="tchip_${id}" class="tchip"></span></div>`:''}</div></div>`;
   return `<h1>Connections</h1><p class="sub">How you reach the agent, and where its activity is logged.</p>
    <div class="cx-sec">Chat channels</div>
    ${card('tg','Telegram','Chat from Telegram',a.telegram.on,a.telegram.token,
@@ -354,6 +386,18 @@ function cxToggle(id,on){const el=$('#cx_'+id);if(!el)return;if(on)el.classList.
     :`<span class="cx-chip"><i class="dot down"></i>Off${has?' &middot; <span class="mu">saved</span>':''}</span>`;}
 function cxOpen(id){const el=$('#cx_'+id);if(el)el.classList.toggle('open');}
 function cxEye(b){const i=b.previousElementSibling;i.type=i.type==='password'?'text':'password';b.title=i.type==='password'?'Show':'Hide';}
+function cxTest(id){
+  const chip=$('#tchip_'+id); if(chip){chip.className='tchip info';chip.textContent='Testing…';}
+  const g=(sel)=>($(sel)&&$(sel).value||'').trim();
+  const body={tg:{item:'telegram',token:g('#a_tg')},
+    gl:{item:'galileo'},
+    o11y:{item:'o11y',realm:g('#a_or'),token:g('#a_ot')},
+    sp:{item:'splunk',url:g('#a_su'),token:g('#a_st')}}[id];
+  if(!body)return;
+  api('/api/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(r=>{
+    if(chip){chip.className='tchip '+(r.ok===true?'ok':r.ok===false?'bad':'info');chip.textContent=r.msg||'';}
+  });
+}
 async function saveAccess(){
   const g=(id)=>($('#'+id)?.value||'').trim();const on=(id)=>!!($('#'+id)&&$('#'+id).checked);
   await api('/api/access',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
