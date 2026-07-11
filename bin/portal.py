@@ -301,15 +301,23 @@ def cred_test(item, d):
     try:
         if item == "model":
             base = (d.get("base") or "").strip()
+            key = (d.get("key") or "").strip()
             if not base or "ollama" in base:
                 return {"ok": None, "msg": "Bundled local model. It downloads and verifies at launch."}
             probe = base.replace("host.docker.internal", "localhost").rstrip("/") + "/models"
+            req = urllib.request.Request(probe)
+            if key and key.lower() != "unused":
+                req.add_header("Authorization", "Bearer " + key)   # cloud providers auth /models
             try:
-                with urllib.request.urlopen(probe, timeout=6) as r:
+                with urllib.request.urlopen(req, timeout=6) as r:
                     ids = [x.get("id") for x in json.loads(r.read().decode()).get("data", [])][:6]
-                    return {"ok": True, "msg": "Endpoint OK." + (" Found: " + ", ".join(ids) if ids else "")}
+                    return {"ok": True, "msg": "Key works." + (" Models: " + ", ".join(ids) if ids else "")}
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403):
+                    return {"ok": False, "msg": "The key was rejected (HTTP %d). Recheck it." % e.code}
+                return {"ok": False, "msg": f"Endpoint error (HTTP {e.code}) at {base}."}
             except Exception:
-                return {"ok": False, "msg": f"No response at {base}. Is the server running?"}
+                return {"ok": False, "msg": f"No response at {base}. Is the URL/key correct?"}
         if item == "telegram":
             tok = (d.get("token") or "").strip()
             if not tok:

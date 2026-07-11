@@ -108,7 +108,14 @@ const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"
 const S={view:null,state:null};
 const NAV=[['start','Set up'],['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
 const CHAT={msgs:[],busy:false};
-const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',endpoint:'bundled',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
+const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',endpoint:'bundled',provider:'groq',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
+// Cloud model presets: pick one, paste a key, done. Base URL + model auto-filled.
+const PROVIDERS={
+  groq:{name:'Groq (free)',base:'https://api.groq.com/openai/v1',model:'llama-3.3-70b-versatile',keyhint:'gsk_...',link:'https://console.groq.com/keys',note:'Free and fast, a 70B model. A key takes about 30 seconds, no card.'},
+  github:{name:'GitHub Models (free)',base:'https://models.github.ai/inference',model:'meta/Llama-3.3-70B-Instruct',keyhint:'github_pat_... or ghp_...',link:'https://github.com/settings/tokens',note:'Free with a GitHub token that has Models: read.'},
+  nvidia:{name:'NVIDIA NIM (free)',base:'https://integrate.api.nvidia.com/v1',model:'meta/llama-3.3-70b-instruct',keyhint:'nvapi-...',link:'https://build.nvidia.com/',note:'Free tier, capable, a little slower to respond.'},
+  openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-4o-mini',keyhint:'sk-...',link:'https://platform.openai.com/api-keys',note:'Paid. Uses your own OpenAI key.'},
+};
 
 async function api(path,opts){const r=await fetch(path,opts);return r.json();}
 async function loadState(){S.state=await api('/api/state');
@@ -160,20 +167,15 @@ function statsRow(st){const g=st.gov;
   </div>`;
 }
 function quickStart(st){
-  const s=st.setup||{}; const gpu=s.gpu;
-  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen3.5:4b':m.id==='qwen3.5:2b');
-    const have=(s.downloaded||[]).some(x=>x===m.id||x.startsWith(m.id));
-    return `<option value="${m.id}" ${def?'selected':''}>${m.id} &middot; ${m.note}${have?' (downloaded)':''}</option>`;}).join('');
+  const s=st.setup||{}; const cfg=s.configured&&!s.local;
   return `<div class="card" style="border-color:var(--ac)">
-    <h2 style="margin-top:0">Quick start</h2>
-    <p class="sub" style="margin-bottom:12px">No setup needed. This runs a model on your machine ${gpu?'<b style="color:var(--g)">with your GPU</b>':'<b>on the CPU</b>'} and starts the governed agent.${gpu?'':' No GPU detected, so a small, fast model is picked for you.'}</p>
-    <label style="font-size:13px;color:var(--hd)">Model</label>
-    <select id="qsmodel" style="margin:5px 0 12px">${opts}</select>
+    <h2 style="margin-top:0">Start the agent</h2>
+    <p class="sub" style="margin-bottom:12px">${cfg?`Set to use <b>${esc(st.llm.model||'your model')}</b>. Start it now, or change the model in Set up.`:'No model connected yet. In Set up, pick a provider and paste one API key.'}</p>
     <div class="foot" style="margin:0">
-      <button class="btn" onclick="quickstart()">Download model &amp; start</button>
-      ${s.configured&&!s.local?`<button class="btn ghost" onclick="lifecycle('up','Starting with your configured LLM…')">Start with my LLM (${esc(st.llm.model||'external')})</button>`:''}
+      ${cfg?`<button class="btn" onclick="lifecycle('up','Starting the agent…')">Start</button>`:''}
+      <button class="btn ${cfg?'ghost':''}" onclick="go('start')">${cfg?'Change the model':'Connect a model'}</button>
     </div>
-    <p class="cx-help" style="margin-top:8px">First run downloads the model and compiles the agent (a few minutes). Both are kept afterwards.</p></div>`;
+    ${cfg?`<p class="cx-help" style="margin-top:8px">First start compiles the agent (a few minutes), then restarts are instant.</p>`:''}</div>`;
 }
 async function quickstart(){const m=$('#qsmodel').value;
   await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
@@ -240,27 +242,33 @@ function startStep(st){
   if(b==='error') return `<div class="card" style="border-color:var(--rd)"><b>That did not work, and it is not your fault.</b>
     <div class="mu" style="font-size:13px;margin:6px 0 10px">${esc(SETUP.build.err||'The build stopped.')}</div>
     <div class="foot" style="margin:0"><button class="btn" onclick="setupStart(true)">Retry</button></div></div>`;
-  const s=st.setup||{}; const gpu=s.gpu; const own=SETUP.endpoint==='own';
-  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen3.5:4b':m.id==='qwen3.5:2b');
-    return `<option value="${m.id}" ${def?'selected':''}>${m.id} · ${m.note}</option>`;}).join('');
-  const seg=`<div class="seg"><button class="${own?'':'on'}" onclick="SETUP.endpoint='bundled';render()">Bundled local model</button><button class="${own?'on':''}" onclick="SETUP.endpoint='own';render()">My own model (LLM)</button></div>`;
-  const bundled=`<label style="font-size:13px;color:var(--hd)">Model</label>
-    <select id="su_model" style="margin:5px 0 4px">${opts}</select>
-    <div class="cx-help" style="margin-bottom:10px">No keys. Runs on this machine${gpu?' <b style="color:var(--g)">with your GPU</b>':' on the CPU'}. Downloads on first launch.</div>`;
-  const ownf=`<div class="cx-field"><label>Base URL</label><input id="su_base" placeholder="https://api.openai.com/v1" value="${esc((st.llm&&st.llm.base&&!s.local)?st.llm.base:'')}"><div class="cx-help">Any OpenAI-compatible endpoint (your vLLM, OpenAI, etc).</div></div>
-    <div class="cx-field"><label>Model name</label><input id="su_omodel" placeholder="gpt-4o-mini" value="${esc((!s.local&&st.llm&&st.llm.model)?st.llm.model:'')}"></div>
-    <div class="cx-field"><label>API key</label><input id="su_key" type="password" placeholder="type unused for a local endpoint"></div>
-    <div class="foot" style="margin:0 0 8px"><button type="button" class="btn ghost sm" onclick="testModel()">Test</button><span id="su_test" class="tchip"></span></div>`;
-  return `<div class="card" style="border-color:var(--ac)"><b>Step 1 &middot; Start your agent</b>
-    <div class="mu" style="font-size:13px;margin:6px 0 10px">Pick where the model runs. The bundled option needs nothing.</div>
-    ${seg}
-    ${own?ownf:bundled}
+  const P=PROVIDERS[SETUP.provider||'groq']; const custom=(SETUP.provider==='custom');
+  const provOpts=Object.entries(PROVIDERS).map(([k,v])=>`<option value="${k}" ${(SETUP.provider||'groq')===k?'selected':''}>${v.name}</option>`).join('')
+    +`<option value="custom" ${custom?'selected':''}>Other / self-hosted (custom endpoint)</option>`;
+  const guide=custom?'Point at any OpenAI-compatible server, including a local Ollama.'
+    :`${P.note} <a class="ac" href="${P.link}" target="_blank" rel="noopener">Get a key &#8599;</a>`;
+  const fields=custom
+    ?`<div class="cx-field"><label>Base URL</label><input id="su_base" placeholder="https://api.openai.com/v1" value="${esc((st.llm&&st.llm.base&&!(st.setup&&st.setup.local))?st.llm.base:'')}"><div class="cx-help">e.g. your vLLM, or <span class="mono">http://host.docker.internal:11434/v1</span> for a local Ollama.</div></div>
+       <div class="cx-field"><label>Model name</label><input id="su_omodel" placeholder="gpt-4o-mini" value="${esc((st.setup&&!st.setup.local&&st.llm&&st.llm.model)?st.llm.model:'')}"></div>`
+    :`<input type="hidden" id="su_base" value="${esc(P.base)}"><input type="hidden" id="su_omodel" value="${esc(P.model)}">
+       <div class="cx-help" style="margin:-4px 0 10px">Uses <span class="mono">${esc(P.model)}</span>. The endpoint URL is filled in for you.</div>`;
+  return `<div class="card" style="border-color:var(--ac)"><b>Step 1 &middot; Connect your model</b>
+    <div class="mu" style="font-size:13px;margin:6px 0 12px">Pick a provider and paste one API key. The agent runs on that model, with every prompt still checked by the governor.</div>
+    <div class="cx-field"><label>Provider</label>
+      <select id="su_prov" onchange="SETUP.provider=this.value;render()">${provOpts}</select>
+      <div class="cx-help">${guide}</div></div>
+    ${fields}
+    <div class="cx-field"><label>API key</label>
+      <div class="cx-inrow"><input id="su_key" type="password" placeholder="${custom?'your key (or &quot;unused&quot; for a local server)':esc(P.keyhint)}"><button type="button" class="cx-eye" onclick="cxEye(this)" title="Show">&#128065;</button></div>
+      <div class="cx-help">Stored only in your local .env, and not shown again after launch.${custom?'':' Free cloud tiers may log inputs, so avoid sensitive data.'}</div></div>
+    <div class="foot" style="margin:2px 0 8px"><button type="button" class="btn ghost sm" onclick="testModel()">Test the key</button><span id="su_test" class="tchip"></span></div>
     <div class="foot" style="margin:0"><button class="btn" onclick="setupStart()">Launch</button></div></div>`;
 }
 async function testModel(){
   const base=($('#su_base')&&$('#su_base').value||'').trim(), model=($('#su_omodel')&&$('#su_omodel').value||'').trim();
+  const key=($('#su_key')&&$('#su_key').value||'').trim();
   const chip=$('#su_test'); if(chip){chip.className='tchip info';chip.textContent='Testing…';}
-  const r=await api('/api/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({item:'model',base,model})});
+  const r=await api('/api/test',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({item:'model',base,model,key})});
   if(chip){chip.className='tchip '+(r.ok===true?'ok':r.ok===false?'bad':'info');chip.textContent=r.msg||'';}
 }
 function buildStages(){
@@ -290,20 +298,16 @@ function buildingCard(){
       <button class="btn ghost" onclick="setupStop()">Stop</button></div></div>`;
 }
 async function setupStart(retry){
-  if(SETUP.endpoint==='own' && !retry){
+  if(!retry){
     const base=($('#su_base')&&$('#su_base').value||'').trim();
     const model=($('#su_omodel')&&$('#su_omodel').value||'').trim();
     const key=($('#su_key')&&$('#su_key').value||'').trim();
-    if(!base||!model){toast('Enter a base URL and a model name');return;}
+    if(!base||!model){toast('Pick a provider, or fill in the custom endpoint');return;}
+    if(!key){toast('Paste your API key');return;}
     SETUP.build={phase:'building',lines:[],n:0,err:''}; render();
     await api('/api/model',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({base,model,key})});
-    await api('/api/up',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
-    setupPoll(); return;
-  }
-  const el=$('#su_model');
-  SETUP.model=(el&&el.value)||SETUP.model||((S.state.setup&&S.state.setup.gpu)?'qwen3.5:4b':'qwen3.5:2b');
-  SETUP.build={phase:'building',lines:[],n:0,err:''}; render();
-  await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:SETUP.model})});
+  } else { SETUP.build={phase:'building',lines:[],n:0,err:''}; render(); }
+  await api('/api/up',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
   setupPoll();
 }
 async function setupPoll(){

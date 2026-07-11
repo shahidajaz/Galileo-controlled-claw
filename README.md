@@ -4,9 +4,9 @@
 
 **A private AI agent you run on your own machine, with a governor in front of it that checks every action before it happens.** Clone it, run one command, and you have a working, governed agent, plus a hands-on testbed for the real tools it wires together: [Agent Control](https://github.com/agentcontrol/agent-control), [DefenseClaw](https://github.com/cisco-ai-defense/defenseclaw), [Galileo](https://galileo.ai/), and Cisco AI Defense.
 
-- **Local by default.** A model runs on your machine (bundled Ollama). Nothing leaves the box.
+- **Your model, one key.** Point it at a provider (Groq, GitHub Models, NVIDIA, OpenAI) with a single API key, or at your own self-hosted / local endpoint. A free key takes about a minute.
 - **Governed by default.** Every tool call and model prompt is checked by Agent Control and blocked if it breaks a rule, fail-closed.
-- **A web dashboard** to set it up, chat with it, and edit the rules. No account, no API key, no separate logins.
+- **A web dashboard** to set it up, chat with it, and edit the rules. No separate logins.
 
 ---
 
@@ -18,19 +18,17 @@ cd Galileo-controlled-claw
 ./setup.sh
 ```
 
-`setup.sh` opens a **guided setup board**: choose your model, toggle governance, and optionally wire observability (Galileo / Splunk) and channels (Telegram / Webex). Everything is pre-wired, so you just fill in what you want, and you can test each credential in place. Press **L** to launch when you are ready; it hands off to the build for you.
+`setup.sh` opens a **guided setup board**. Step 1 is the only thing you must do: **pick a provider and paste one API key** (see [Choosing the model](#choosing-the-model) for the free options). Governance is already on; observability (Galileo / Splunk) and channels (Telegram / Webex) are optional and pre-wired, so you just fill in what you want and can test each credential in place. Press **L** to launch when you are ready.
 
-Already know your config, or want zero questions? Skip the board and run **`./up.sh`** directly, it uses sensible defaults (bundled local model, governance on) and does the same build.
-
-Either way, the **first launch takes a few minutes** (it compiles the agent and pulls the model, both kept afterward), then prints your dashboard URL (default `http://127.0.0.1:8891`). Open it and click **Get started**.
+The **first launch takes a few minutes** (it compiles the agent), then prints your dashboard URL (default `http://127.0.0.1:8891`). Open it and click **Get started**.
 
 > Running on a remote box? Tunnel the port: `ssh -L 8891:127.0.0.1:8891 <host>`
 
 ## Requirements
 
 - **Docker** + Docker Compose v2
-- **~5 GB disk** for the default model (kept, not re-downloaded)
-- A **GPU is used automatically** if present (NVIDIA on Linux or Windows/WSL). No GPU is fine, a small CPU model is picked for you. On a Mac, containers cannot reach the GPU, so the local model runs on CPU, or point it at your own endpoint (see below).
+- **An API key** for a model provider (a free Groq key works, see [Choosing the model](#choosing-the-model))
+- A few GB of disk for the agent image. Running fully offline against a local model instead? See the self-hosted note below.
 
 ---
 
@@ -121,29 +119,32 @@ The open-source Agent Control ships **regex / list / json / sql** evaluators, th
 - **DefenseClaw** (local, open source). Run [DefenseClaw](https://github.com/cisco-ai-defense/defenseclaw) on your machine, set `DEFENSECLAW_TOKEN` in `.env`, and pick it as a rule's detector in the Governance tab. `up.sh` runs a small shim so the container can reach your local gateway.
 - **Cisco AI Defense** (cloud). A native Agent Control evaluator, `cisco.ai_defense`, needs a key.
 
-## Changing the model
+## Choosing the model
 
-The default is a bundled **`qwen3.5`** model picked for your hardware (`qwen3.5:4b` on a GPU, the lighter `qwen3.5:2b` on CPU), running locally in Ollama with no keys and a 256K context. To use something else, edit two keys in `.env`:
+Setup asks for one thing: **a provider and an API key.** In Step 1, pick a provider, paste a key, press **Test the key**, and **Launch**. The endpoint URL and model name are filled in for you.
+
+| Provider | Free? | Get a key |
+|---|---|---|
+| **Groq** (default) | yes, fast 70B | [console.groq.com/keys](https://console.groq.com/keys) |
+| **GitHub Models** | yes, with a GitHub token (Models: read) | [github.com/settings/tokens](https://github.com/settings/tokens) |
+| **NVIDIA NIM** | yes, a bit slower | [build.nvidia.com](https://build.nvidia.com/) |
+| **OpenAI** | paid | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **Other / self-hosted** | your call | any OpenAI-compatible URL, including a local Ollama |
+
+**Getting a free Groq key (about a minute):** open [console.groq.com/keys](https://console.groq.com/keys), sign in, click **Create API Key**, copy it (it starts with `gsk_`), and paste it into Step 1. No credit card.
+
+Every provider stays **fully governed**: the prompt goes through the proxy and Agent Control before it reaches the model. Free cloud tiers may log inputs, so avoid sensitive data on them.
+
+Prefer to set it by hand? Edit these keys in `.env` and rerun `./up.sh`:
 
 ```bash
-# .env  (defaults for the bundled local model)
-LLM_BASE_URL=http://ollama:11434/v1   # the bundled Ollama; leave as-is for local
-LLM_MODEL=                            # blank = auto-pick (qwen3.5:4b GPU, qwen3.5:2b CPU); or set any Ollama tag
-LLM_API_KEY=unused                     # a real key is only needed for external endpoints
+# .env
+LLM_BASE_URL=https://api.groq.com/openai/v1   # your provider's endpoint
+LLM_MODEL=llama-3.3-70b-versatile             # the model to use
+LLM_API_KEY=gsk_your_key_here                 # your provider key
 ```
 
-Three ways to change it:
-
-1. **The setup page** (before launch): the Model card. Easiest.
-2. **Edit `.env`** then rerun `./up.sh`.
-3. Pick another local size from [ollama.com/library/qwen3.5](https://ollama.com/library/qwen3.5) (`qwen3.5:2b`, `qwen3.5:9b`, ...), or point at your own OpenAI-compatible endpoint:
-
-```bash
-# use your own endpoint instead of the bundled model
-LLM_BASE_URL=https://api.openai.com/v1     # or your vLLM / other endpoint
-LLM_MODEL=gpt-4o-mini
-LLM_API_KEY=sk-...
-```
+**Run fully offline instead?** Choose **Other / self-hosted** and point at a local Ollama (`http://host.docker.internal:11434/v1`) with any pulled tag as the model and `unused` as the key; nothing then leaves your machine.
 
 ## Teardown
 
