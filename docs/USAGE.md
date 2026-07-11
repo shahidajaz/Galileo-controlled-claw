@@ -1,4 +1,4 @@
-# Using openclaw-governed
+# Using Galileo controlled Claw
 
 ## 1. Bring it up
 

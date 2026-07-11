@@ -12,7 +12,7 @@ case "${1:---stop}" in
     "${DOWN[@]}"; echo "Stopped. Kept all data and the model." ;;
   --reset)
     "${DOWN[@]}"
-    for v in $(docker volume ls -q --filter "name=^openclaw-governed_" 2>/dev/null | grep -v 'ollamamodels'); do
+    for v in $(docker volume ls -q --filter "name=^galileo-governed_" 2>/dev/null | grep -v 'ollamamodels'); do
       docker volume rm "$v" >/dev/null 2>&1 && echo "  cleared $v"
     done
     echo "Reset. State cleared; the model is kept." ;;

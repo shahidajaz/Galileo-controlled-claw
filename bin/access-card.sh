@@ -24,7 +24,7 @@ fi
 
 echo
 echo "  ╔══════════════════════════════════════════════════════════════╗"
-echo "  ║   openclaw-governed  ·  access card                          ║"
+echo "  ║   Galileo controlled Claw · access card                          ║"
 echo "  ╚══════════════════════════════════════════════════════════════╝"
 echo
 echo "  ENDPOINTS   (bound to 127.0.0.1 - SSH-tunnel to reach remotely)"

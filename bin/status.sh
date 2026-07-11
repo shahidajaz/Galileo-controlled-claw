@@ -18,7 +18,7 @@ RUN="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null ||
 isup() { printf '%s\n' "$RUN" | grep -qx "$1"; }
 svc()  { if isup "$1"; then printf '     %b  %-16s %s\n' "${GR}●${R}" "$1" "up${2:+   $2}"; else printf '     %b  %-16s %s\n' "${DIM}○${R}" "$1" "${DIM}down${R}"; fi; }
 
-printf '\n  %s\n  %s\n' "${CY}${B}openclaw-governed · status${R}" "${DIM}live state of the stack${R}"
+printf '\n  %s\n  %s\n' "${CY}${B}Galileo controlled Claw · status${R}" "${DIM}live state of the stack${R}"
 
 hd "SERVICES"
 svc postgres "(governor DB)"; svc server "(Agent Control :$ACP)"; svc llm-proxy "(LLM gate)"
