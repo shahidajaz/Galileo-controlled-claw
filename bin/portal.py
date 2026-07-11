@@ -426,7 +426,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"started": True}))
         if u.path == "/api/quickstart":
             # one click: point the agent at the bundled Ollama, pick a model, build + pull + start
-            m = (d.get("model") or DEFAULT_MODEL).strip()
+            m = (d.get("model") or ("qwen3.5:4b" if has_gpu() else "qwen3.5:2b")).strip()
             setenv("LLM_BASE_URL", "http://ollama:11434/v1")
             setenv("LLM_MODEL", m)
             setenv("LLM_API_KEY", "unused")

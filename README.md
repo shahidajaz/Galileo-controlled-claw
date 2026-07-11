@@ -110,12 +110,12 @@ The open-source Agent Control ships **regex / list / json / sql** evaluators, th
 
 ## Changing the model
 
-The default is the bundled **`qwen3.5:4b`**, running locally in Ollama (no keys, ~3.4 GB, 256K context). To use something else, edit two keys in `.env`:
+The default is a bundled **`qwen3.5`** model picked for your hardware (`qwen3.5:4b` on a GPU, the lighter `qwen3.5:2b` on CPU), running locally in Ollama with no keys and a 256K context. To use something else, edit two keys in `.env`:
 
 ```bash
 # .env  (defaults for the bundled local model)
 LLM_BASE_URL=http://ollama:11434/v1   # the bundled Ollama; leave as-is for local
-LLM_MODEL=qwen3.5:4b                   # any Ollama tag, or blank to auto-pick
+LLM_MODEL=                            # blank = auto-pick (qwen3.5:4b GPU, qwen3.5:2b CPU); or set any Ollama tag
 LLM_API_KEY=unused                     # a real key is only needed for external endpoints
 ```
 

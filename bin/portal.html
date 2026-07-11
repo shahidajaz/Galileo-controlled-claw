@@ -161,7 +161,7 @@ function statsRow(st){const g=st.gov;
 }
 function quickStart(st){
   const s=st.setup||{}; const gpu=s.gpu;
-  const opts=(s.recommended||[]).map(m=>{const def=(m.id==='qwen3.5:4b');
+  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen3.5:4b':m.id==='qwen3.5:2b');
     const have=(s.downloaded||[]).some(x=>x===m.id||x.startsWith(m.id));
     return `<option value="${m.id}" ${def?'selected':''}>${m.id} &middot; ${m.note}${have?' (downloaded)':''}</option>`;}).join('');
   return `<div class="card" style="border-color:var(--ac)">
@@ -241,7 +241,7 @@ function startStep(st){
     <div class="mu" style="font-size:13px;margin:6px 0 10px">${esc(SETUP.build.err||'The build stopped.')}</div>
     <div class="foot" style="margin:0"><button class="btn" onclick="setupStart(true)">Retry</button></div></div>`;
   const s=st.setup||{}; const gpu=s.gpu; const own=SETUP.endpoint==='own';
-  const opts=(s.recommended||[]).map(m=>{const def=(m.id==='qwen3.5:4b');
+  const opts=(s.recommended||[]).map(m=>{const def=(gpu?m.id==='qwen3.5:4b':m.id==='qwen3.5:2b');
     return `<option value="${m.id}" ${def?'selected':''}>${m.id} · ${m.note}</option>`;}).join('');
   const seg=`<div class="seg"><button class="${own?'':'on'}" onclick="SETUP.endpoint='bundled';render()">Bundled local model</button><button class="${own?'on':''}" onclick="SETUP.endpoint='own';render()">My own model (LLM)</button></div>`;
   const bundled=`<label style="font-size:13px;color:var(--hd)">Model</label>
@@ -279,7 +279,7 @@ function buildingCard(){
   const rows=[['Build images',1],['Download model',2],['Load model and start governor',3],['Final check',4]].map(([label,n])=>{
     const stt=n<stage?'done':n===stage?'cur':'todo';
     const icon=stt==='done'?'<i class="dot up"></i>':stt==='cur'?'<span class="spin"></span>':'<i class="dot down"></i>';
-    const right=(n===2&&stt==='cur'&&pct!=null)?`${pct}% of 3.4 GB`:stt==='done'?'done':n===4&&stt==='cur'?'asking the agent':'';
+    const right=(n===2&&stt==='cur'&&pct!=null)?`${pct}%`:stt==='done'?'done':n===4&&stt==='cur'?'asking the agent':'';
     const bar=(n===2&&stt==='cur'&&pct!=null)?`<div class="pbar"><div style="width:${pct}%"></div></div>`:'';
     return `<div class="svc" style="border-top:0;padding:5px 0">${icon}<span class="nm">${label}</span><span class="st">${right}</span></div>${bar}`;
   }).join('');
@@ -301,7 +301,7 @@ async function setupStart(retry){
     setupPoll(); return;
   }
   const el=$('#su_model');
-  SETUP.model=(el&&el.value)||SETUP.model||'qwen3.5:4b';
+  SETUP.model=(el&&el.value)||SETUP.model||((S.state.setup&&S.state.setup.gpu)?'qwen3.5:4b':'qwen3.5:2b');
   SETUP.build={phase:'building',lines:[],n:0,err:''}; render();
   await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:SETUP.model})});
   setupPoll();
@@ -327,7 +327,7 @@ function setupStop(){
 function helloStep(st){
   const rep=SETUP.helloReply;
   return `<div class="card" style="border-color:var(--ac)"><b>Step 2 · Say hello</b>
-    <div class="mu" style="font-size:13px;margin:6px 0 10px">Your agent is live and governed. Ask it anything.</div>
+    <div class="mu" style="font-size:13px;margin:6px 0 10px">Your agent is live and governed. Ask it anything. On a CPU the first reply can take a minute.</div>
     ${rep?`<div class="chatlog" style="height:auto;max-height:30vh;margin-bottom:10px"><div class="msg u"><div class="who">you</div><pre>${esc(SETUP.helloMsg)}</pre></div><div class="msg"><div class="who">agent</div><pre>${esc(rep)}</pre></div></div>`:''}
     <div class="foot" style="margin:0"><input id="su_msg" value="What can you do, and what rules are you under?" style="flex:1" ${SETUP.helloBusy?'disabled':''} onkeydown="if(event.key==='Enter')setupHello()">
       <button class="btn" onclick="setupHello()" ${SETUP.helloBusy?'disabled':''}>${SETUP.helloBusy?'<span class="spin"></span>…':'Send'}</button></div></div>`;
