@@ -60,7 +60,8 @@ e_model() {
   probe="${b/host.docker.internal/localhost}"
   avail=$(curl -sf --max-time 5 "${probe%/}/models" 2>/dev/null | python3 -c 'import sys,json;print(", ".join(x["id"] for x in json.load(sys.stdin).get("data",[])))' 2>/dev/null || true)
   [ -n "$avail" ] && ok "reachable · models: $avail"
-  m=$(ask "Model name" "$(curdef LLM_MODEL openai/gpt-oss-120b)")
+  local mdef; if printf '%s' "$b" | grep -q ollama; then mdef="$(cur LLM_MODEL)"; else mdef="$(curdef LLM_MODEL openai/gpt-oss-120b)"; fi
+  m=$(ask "Model name (blank = auto-pick for the bundled local model)" "$mdef")
   k=$(ask "API key ('unused' for a local model)" "$(curdef LLM_API_KEY unused)")
   c=$(ask "Context window in tokens (8192 / 32768 / 131072)" "$(curdef LLM_CONTEXT_WINDOW 131072)")
   setenv LLM_BASE_URL "$b"; setenv LLM_MODEL "$m"; setenv LLM_API_KEY "$k"; setenv LLM_CONTEXT_WINDOW "$c"

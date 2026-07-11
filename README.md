@@ -13,14 +13,16 @@
 ## Quick start
 
 ```bash
-git clone <this-repo> governed-openclaw
-cd governed-openclaw
-./up.sh
+git clone https://github.com/shahidajaz/Galileo-controlled-claw.git
+cd Galileo-controlled-claw
+./setup.sh
 ```
 
-`up.sh` generates its own secrets, picks free ports, detects your hardware (GPU or CPU), downloads a suitable model, and starts the governed agent. **First run takes a few minutes** (it compiles the agent and pulls the model, both are kept afterward). When it finishes it prints an access card with your dashboard URL (default `http://127.0.0.1:8891`).
+`setup.sh` opens a **guided setup board**: choose your model, toggle governance, and optionally wire observability (Galileo / Splunk) and channels (Telegram / Webex). Everything is pre-wired, so you just fill in what you want, and you can test each credential in place. Press **L** to launch when you are ready; it hands off to the build for you.
 
-Open that URL and click **Get started**.
+Already know your config, or want zero questions? Skip the board and run **`./up.sh`** directly, it uses sensible defaults (bundled local model, governance on) and does the same build.
+
+Either way, the **first launch takes a few minutes** (it compiles the agent and pulls the model, both kept afterward), then prints your dashboard URL (default `http://127.0.0.1:8891`). Open it and click **Get started**.
 
 > Running on a remote box? Tunnel the port: `ssh -L 8891:127.0.0.1:8891 <host>`
 
