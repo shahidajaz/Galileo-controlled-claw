@@ -34,6 +34,19 @@ Either way, the **first launch takes a few minutes** (it compiles the agent and 
 
 ---
 
+## Faster on a Mac (automatic)
+
+Docker on a Mac cannot use the Mac's GPU (Metal), so the **bundled container** model runs on CPU and is slow. `up.sh` handles this for you: if a **host Ollama** is running, it detects it and routes the (still fully governed) stack to your host's Metal-accelerated Ollama automatically, no manual URL.
+
+To get the fast path, just have Ollama running on your Mac before you launch:
+
+```bash
+# once, on your Mac:  install and run the Ollama app, or:
+brew install ollama && ollama serve
+```
+
+Then `./setup.sh` as usual: `up.sh` pulls the model on the host and points the agent at it. With no host Ollama it falls back to the container's CPU model (works, just slow, prefer `qwen3.5:2b`). To force a specific endpoint, set `LLM_BASE_URL` in `.env` or use "My own model (LLM)" in Set up.
+
 ## Test it in 2 minutes
 
 Once the dashboard is up, open the **Chat** tab and try these.

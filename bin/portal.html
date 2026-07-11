@@ -502,6 +502,7 @@ function chatView(st){
   const log=CHAT.msgs.map(m=>`<div class="msg ${m.role==='user'?'u':''}"><div class="who">${m.role==='user'?'you':'agent'}</div><pre>${esc(m.text)}</pre></div>`).join('')
     ||'<div class="mu">Say hi to your agent. Every reply is governed.</div>';
   return `<h1>Chat</h1><p class="sub">Talk to the agent (openclaw-agent:main). ${up?'':'<span style="color:var(--am)">The stack is not running. Start it from Home first.</span>'}</p>
+    ${up&&st.setup&&st.setup.local&&!st.setup.gpu?`<div class="cx-help" style="margin:-8px 0 12px">The model is running on CPU, so replies can take a minute or two. For speed, point at a host Ollama or pick a smaller model in <a class="ac" onclick="go('start')">Set up</a>.</div>`:''}
     <div class="chatlog" id="chatlog">${log}</div>
     <div class="foot"><input id="chatin" placeholder="type a message…" ${CHAT.busy||!up?'disabled':''} onkeydown="if(event.key==='Enter')sendChat()" style="flex:1">
       <button class="btn" onclick="sendChat()" ${CHAT.busy||!up?'disabled':''}>${CHAT.busy?'<span class=spin></span>…':'Send'}</button></div>`;

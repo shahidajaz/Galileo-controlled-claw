@@ -221,10 +221,10 @@ def chat_agent(message):
            "--session-id web-$RANDOM -m " + shlex.quote(message))
     try:
         out = subprocess.run(["docker", "compose", "-f", CF, "exec", "-T", OC_SERVICE, "bash", "-lc", cmd],
-                             cwd=ROOT, capture_output=True, text=True, timeout=240).stdout
+                             cwd=ROOT, capture_output=True, text=True, timeout=600).stdout
         return clean_reply(out)
     except subprocess.TimeoutExpired:
-        return "(timed out, the model took too long)"
+        return "(timed out. On CPU the model is slow, try qwen3.5:2b, or point at your host Ollama in Set up.)"
     except Exception as ex:
         return f"(error: {ex})"
 
