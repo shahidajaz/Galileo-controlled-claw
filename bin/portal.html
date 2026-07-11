@@ -108,7 +108,7 @@ const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"
 const S={view:null,state:null};
 const NAV=[['start','Set up'],['home','Home'],['access','Connections'],['governance','Governance'],['control','Agent Control'],['monitoring','Monitoring'],['chat','Chat']];
 const CHAT={msgs:[],busy:false};
-const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',endpoint:'bundled',provider:'groq',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
+const SETUP={hello:false,helloBusy:false,helloReply:'',helloMsg:'',rules:false,ready:false,model:'',provider:'groq',build:{phase:'idle',lines:[],n:0,err:''},skip:{}};
 // Cloud model presets: pick one, paste a key, done. Base URL + model auto-filled.
 const PROVIDERS={
   groq:{name:'Groq (free)',base:'https://api.groq.com/openai/v1',model:'llama-3.3-70b-versatile',keyhint:'gsk_...',link:'https://console.groq.com/keys',note:'Free and fast, a 70B model. A key takes about 30 seconds, no card.'},
@@ -155,7 +155,7 @@ function homeView(st){
     <div class="mu" style="font-size:12px;margin-top:7px;line-height:1.7">
       <b>Stop</b>: keep everything, restart is instant.<br>
       <b>Reset</b>: clear data (governance, memory, creds), keep the model.<br>
-      <b>Wipe all</b>: delete everything, including the downloaded model.</div>
+      <b>Wipe all</b>: delete everything, containers, data, and this project's images.</div>
     <p class="sub" style="margin-top:14px">Agent Control policy UI (advanced): <a class="ac" href="http://127.0.0.1:${esc(st.ac_port)}" target="_blank" rel="noopener">127.0.0.1:${esc(st.ac_port)}</a></p>`;
 }
 function statsRow(st){const g=st.gov;
@@ -177,14 +177,11 @@ function quickStart(st){
     </div>
     ${cfg?`<p class="cx-help" style="margin-top:8px">First start compiles the agent (a few minutes), then restarts are instant.</p>`:''}</div>`;
 }
-async function quickstart(){const m=$('#qsmodel').value;
-  await api('/api/quickstart',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:m})});
-  applyOverlay('Downloading '+m+' + building the agent (first time is slow)…');}
 async function lifecycle(which,title){await api('/api/'+which,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});applyOverlay(title);}
 async function teardown(mode){
   const msg={stop:'Stop the stack? Everything is kept, restart is instant.',
-    reset:'Reset? Clears governance data, agent memory and credentials. The downloaded model is kept.',
-    wipe:'Wipe everything, including the downloaded model? This cannot be undone.'}[mode];
+    reset:'Reset? Clears governance data, agent memory and credentials. Your model settings are kept.',
+    wipe:'Wipe everything: containers, data, and this project\'s images? This cannot be undone.'}[mode];
   if(!confirm(msg))return;
   SETUP.ready=false; SETUP.hello=false; SETUP.build={phase:'idle',lines:[],n:0,err:''}; SETUP.skip={};
   await api('/api/down',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode})});
@@ -221,8 +218,8 @@ function setupView(st){
     `<button class="btn" onclick="SETUP.rules=true;go('governance')">See my rules</button><button class="btn ghost" onclick="SETUP.skip.rules=true;render()">Fine as-is</button>`);
   else if(cur==='channels') card=stepCard('Step 4 · Connect a chat channel','Talk to your agent from your phone or team chat. Optional.',
     `<button class="btn" onclick="go('access')">Set one up</button><button class="btn ghost" onclick="SETUP.skip.channels=true;render()">Not now</button>`);
-  else if(cur==='monitoring') card=stepCard('Step 5 · Turn on monitoring','See every decision the governor makes. Optional, works without it.',
-    `<button class="btn" onclick="go('access')">Turn it on</button><button class="btn ghost" onclick="SETUP.skip.monitoring=true;render()">Maybe later</button>`);
+  else if(cur==='monitoring') card=stepCard('Step 5 · Turn on Galileo','Galileo is the key lens for this project: it scores every model call for quality, safety, and hallucination. Splunk can log each decision too. Optional, the agent runs without them.',
+    `<button class="btn" onclick="go('access')">Connect Galileo</button><button class="btn ghost" onclick="SETUP.skip.monitoring=true;render()">Maybe later</button>`);
   return `<h1>Set up your governed agent</h1><p class="sub">Configure once, launch, then manage everything live from the dashboard.</p>
     <div class="rail">${rail}</div>
     ${coreDone&&!allDone?`<div class="card" style="border-color:var(--g)"><b>You can stop here.</b>
@@ -376,7 +373,7 @@ function accessView(st){
      +sec('a_sla','App token','xapp-...',a.slack.app,'Under Basic Information, App-Level Tokens. Create one with the connections:write scope. Starts with xapp-.')
      +sec('a_sls','Signing secret','Paste the signing secret',a.slack.signing,'Under Basic Information, App Credentials. Lets the agent verify messages really came from Slack.'))}
    <div class="cx-sec">Monitoring</div>
-   ${card('gl','Galileo','Scores every model call',a.galileo.on,a.galileo.key,
+   ${card('gl','Galileo','Scores every model call · the key lens',a.galileo.on,a.galileo.key,
      sec('a_gk','API key','Paste your Galileo API key',a.galileo.key,'In Galileo, open Settings, then API Keys, and create one.')
      +txt('a_gp','Project name','OpenClaw_Governed',a.galileo.project,'The Galileo project where these records appear.'))}
    ${card('o11y','Splunk Observability','Health metrics and traces',a.o11y.on,a.o11y.token,
@@ -490,14 +487,26 @@ function controlView(st){
 function monitoringView(st){
   const a=st.access; const realm=a.o11y.realm||'';
   const o11yUrl=realm?`https://app.${esc(realm)}.signalfx.com`:'';
-  const card=(on,name,url)=>`<div class="card"><div class="svc" style="border-top:0;padding-top:0">
-     <i class="dot ${on?'up':'down'}"></i><span class="nm"><b>${name}</b></span>
-     ${on&&url?`<a class="btn ghost sm" href="${url}" target="_blank" rel="noopener">Open &#8599;</a>`
-       :`<span class="st">${on?'on':'off'}</span>`}</div></div>`;
-  return `<h1>Monitoring</h1><p class="sub">External dashboards. Turn them on in Connections.</p>
-    ${card(a.galileo.on,'Galileo','https://app.galileo.ai')}
-    ${card(a.o11y.on,'Splunk Observability',o11yUrl)}
-    ${card(a.splunk.on,'Splunk logs','')}`;
+  const gOn=a.galileo.on;
+  const hero=`<div class="card" style="border-color:var(--ac);padding:18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span class="dot ${gOn?'up':'down'}"></span>
+      <span style="font-size:17px;font-weight:640">Galileo</span>
+      <span class="tag" style="border-color:#5a4a7a;color:#b9a7e6">the key lens</span>
+      <span style="flex:1"></span>
+      ${gOn?`<a class="btn sm" href="https://app.galileo.ai" target="_blank" rel="noopener">Open dashboard &#8599;</a>`
+        :`<button class="btn ghost sm" onclick="go('access')">Turn on in Connections</button>`}
+    </div>
+    <div class="mu" style="font-size:13px;line-height:1.65">The reliability lens this project is built around. Galileo scores <b>every model call</b> for quality, safety, tool selection, and hallucination, and traces each governed turn end to end. ${gOn?`Records land in project <span class="mono">${esc(a.galileo.project||'OpenClaw_Galileo')}</span>.`:'Add your Galileo API key in Connections to start the feed.'}</div>
+  </div>`;
+  const small=(on,name,url,desc)=>`<div class="card"><div class="svc" style="border-top:0;padding:2px 0">
+     <i class="dot ${on?'up':'down'}"></i><span class="nm"><b>${name}</b> <span class="mu" style="font-weight:400;font-size:12.5px">&middot; ${desc}</span></span>
+     ${on&&url?`<a class="btn ghost sm" href="${url}" target="_blank" rel="noopener">Open &#8599;</a>`:`<span class="st">${on?'on':'off'}</span>`}</div></div>`;
+  return `<h1>Monitoring</h1><p class="sub"><b>Galileo is the key lens</b> for the agent; Splunk records decisions and logs alongside it. Turn any of them on in Connections.</p>
+    ${hero}
+    <div class="cx-sec" style="margin-top:22px">Also available</div>
+    ${small(a.o11y.on,'Splunk Observability',o11yUrl,'health metrics and traces')}
+    ${small(a.splunk.on,'Splunk logs','','every governance decision as a log event')}`;
 }
 
 /* ---------- Chat ---------- */
@@ -506,7 +515,6 @@ function chatView(st){
   const log=CHAT.msgs.map(m=>`<div class="msg ${m.role==='user'?'u':''}"><div class="who">${m.role==='user'?'you':'agent'}</div><pre>${esc(m.text)}</pre></div>`).join('')
     ||'<div class="mu">Say hi to your agent. Every reply is governed.</div>';
   return `<h1>Chat</h1><p class="sub">Talk to the agent (openclaw-agent:main). ${up?'':'<span style="color:var(--am)">The stack is not running. Start it from Home first.</span>'}</p>
-    ${up&&st.setup&&st.setup.local&&!st.setup.gpu?`<div class="cx-help" style="margin:-8px 0 12px">The model is running on CPU, so replies can take a minute or two. For speed, point at a host Ollama or pick a smaller model in <a class="ac" onclick="go('start')">Set up</a>.</div>`:''}
     <div class="chatlog" id="chatlog">${log}</div>
     <div class="foot"><input id="chatin" placeholder="type a message…" ${CHAT.busy||!up?'disabled':''} onkeydown="if(event.key==='Enter')sendChat()" style="flex:1">
       <button class="btn" onclick="sendChat()" ${CHAT.busy||!up?'disabled':''}>${CHAT.busy?'<span class=spin></span>…':'Send'}</button></div>`;

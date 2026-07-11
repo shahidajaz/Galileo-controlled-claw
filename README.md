@@ -6,7 +6,8 @@
 
 - **Your model, one key.** Point it at a provider (Groq, GitHub Models, NVIDIA, OpenAI) with a single API key, or at your own self-hosted / local endpoint. A free key takes about a minute.
 - **Governed by default.** Every tool call and model prompt is checked by Agent Control and blocked if it breaks a rule, fail-closed.
-- **A web dashboard** to set it up, chat with it, and edit the rules. No separate logins.
+- **Observability, Galileo first.** [Galileo](https://galileo.ai/) is the key lens: it scores every model call for quality, safety, and hallucination, and traces each governed turn. Splunk records each decision alongside it. Both optional, one dashboard tab away.
+- **A web dashboard** to set it up, chat with it, watch it in Galileo, and edit the rules. No separate logins.
 
 ---
 
@@ -20,9 +21,9 @@ cd Galileo-controlled-claw
 
 `setup.sh` opens a **guided setup board**. Step 1 is the only thing you must do: **pick a provider and paste one API key** (see [Choosing the model](#choosing-the-model) for the free options). Governance is already on; observability (Galileo / Splunk) and channels (Telegram / Webex) are optional and pre-wired, so you just fill in what you want and can test each credential in place. Press **L** to launch when you are ready.
 
-The **first launch takes a few minutes** (it compiles the agent), then prints your dashboard URL (default `http://127.0.0.1:8891`). Open it and click **Get started**.
+The **first launch takes a few minutes** (it compiles the agent), then prints your dashboard URL. It uses `http://127.0.0.1:8891` when free, otherwise the next open port (`8892`, `8893`, ...), so **use the exact URL printed in your terminal.** Open it and click **Get started**.
 
-> Running on a remote box? Tunnel the port: `ssh -L 8891:127.0.0.1:8891 <host>`
+> Running on a remote box? Tunnel that port, e.g. `ssh -L 8891:127.0.0.1:8891 <host>` (match the port it printed).
 
 ## Requirements
 
@@ -31,19 +32,6 @@ The **first launch takes a few minutes** (it compiles the agent), then prints yo
 - A few GB of disk for the agent image. Running fully offline against a local model instead? See the self-hosted note below.
 
 ---
-
-## Faster on a Mac (automatic)
-
-Docker on a Mac cannot use the Mac's GPU (Metal), so the **bundled container** model runs on CPU and is slow. `up.sh` handles this for you: if a **host Ollama** is running, it detects it and routes the (still fully governed) stack to your host's Metal-accelerated Ollama automatically, no manual URL.
-
-To get the fast path, just have Ollama running on your Mac before you launch:
-
-```bash
-# once, on your Mac:  install and run the Ollama app, or:
-brew install ollama && ollama serve
-```
-
-Then `./setup.sh` as usual: `up.sh` pulls the model on the host and points the agent at it. With no host Ollama it falls back to the container's CPU model (works, just slow, prefer `qwen3.5:2b`). To force a specific endpoint, set `LLM_BASE_URL` in `.env` or use "My own model (LLM)" in Set up.
 
 ## Test it in 2 minutes
 
@@ -55,7 +43,7 @@ Once the dashboard is up, open the **Chat** tab and try these.
 What is 17 times 3?
 ```
 
-You get an answer from the local model.
+You get an answer from your connected model.
 
 **2. The governor blocks an attack.** Ask it to leak its own instructions:
 
@@ -77,7 +65,7 @@ Now the attack is no longer blocked. Turn it back on with a plain `./up.sh`. Tha
 
 ## The dashboard
 
-Open the portal (default `:8891`). Sidebar:
+Open the portal (default `:8891`, or the port it printed). Sidebar:
 
 | Tab | What it does |
 |---|---|
@@ -87,7 +75,7 @@ Open the portal (default `:8891`). Sidebar:
 | **Governance** | the rules the agent runs under, add / enable / disable / delete inline, and pick each rule's **detector** |
 | **Chat** | talk to the agent |
 | **Agent Control** | the raw policy console, embedded (advanced) |
-| **Monitoring** | links to your Galileo / Splunk dashboards |
+| **Monitoring** | your **Galileo** dashboard (the key lens for every model call), plus Splunk |
 
 ---
 
@@ -151,9 +139,9 @@ LLM_API_KEY=gsk_your_key_here                 # your provider key
 Three levels, from the **Home** tab or the CLI:
 
 ```bash
-./down.sh            # Stop:  keep everything (data + model), instant restart
-./down.sh --reset    # Reset: clear governance / agent state, KEEP the model
-./down.sh --wipe     # Wipe:  delete everything, including the model
+./down.sh            # Stop:  keep all data, instant restart
+./down.sh --reset    # Reset: clear governance / agent state and credentials
+./down.sh --wipe     # Wipe:  delete everything, containers, data, and this project's images
 ```
 
 ## Optional integrations

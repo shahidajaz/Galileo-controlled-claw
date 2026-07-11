@@ -43,8 +43,8 @@ preflight() {
   esac
   if command -v df >/dev/null 2>&1; then
     avail="$(df -Pk . 2>/dev/null | awk 'NR==2{printf "%d", $4/1024/1024}')"
-    if [ -n "${avail:-}" ] && [ "$avail" -lt 6 ]; then
-      echo "NOTE: only ~${avail} GB free here; the default model plus images need ~5-6 GB." >&2
+    if [ -n "${avail:-}" ] && [ "$avail" -lt 4 ]; then
+      echo "NOTE: only ~${avail} GB free here; the agent images need a few GB." >&2
     fi
   fi
   [ "$err" = 0 ] || { echo "Preflight failed. Fix the MISSING item(s) above and rerun ./up.sh" >&2; exit 1; }
@@ -99,33 +99,13 @@ grep -qE '^SPLUNK_O11Y_REALM=.+' .env && PROFILES+=(--profile splunk-o11y)
 # reach your gateway (skip if your gateway already binds a Docker-reachable address).
 grep -qE '^DEFENSECLAW_TOKEN=.+' .env && PROFILES+=(--profile defenseclaw)
 
-# On a Mac, Docker cannot reach the GPU (Metal), so the container's Ollama is CPU-only
-# and slow. If the agent is set to the bundled model AND a host Ollama is running, use
-# the host's Metal-accelerated Ollama automatically. Still fully governed (only the model
-# runtime changes). Override by setting LLM_BASE_URL to something else in .env.
-HOST_OLLAMA=0
-if [ "$(uname -s)" = "Darwin" ] && grep -qE '^LLM_BASE_URL=.*//ollama:' .env \
-   && curl -sf --max-time 3 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-  HOST_OLLAMA=1
-  setkv LLM_BASE_URL "http://host.docker.internal:11434/v1"
-  echo "   Mac + host Ollama detected -> using it (fast, Metal-accelerated), not the CPU container."
-fi
-
-# Local model mode: if the agent's LLM points at the bundled (container) Ollama, run it
-# and use the GPU when present. Otherwise the agent uses your external LLM_BASE_URL.
-CF=(-f compose.yml); LOCAL_MODEL=0
-if grep -qE '^LLM_BASE_URL=.*//ollama:' .env; then
-  LOCAL_MODEL=1; PROFILES+=(--profile models); GPU=0
-  command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && { CF+=(-f compose.gpu.yml); GPU=1; }
-  # auto-pick a model by hardware if the user has not chosen one (fresh clone = blank)
-  if ! grep -qE '^LLM_MODEL=.+' .env; then
-    [ "$GPU" = 1 ] && setkv LLM_MODEL "qwen3.5:4b" || setkv LLM_MODEL "qwen3.5:2b"
-  fi
-  echo "   local model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2) on $([ "$GPU" = 1 ] && echo GPU || echo CPU)"
-elif [ "$HOST_OLLAMA" = 1 ]; then
-  # host Ollama has real acceleration, so default to the bigger model when unset
-  grep -qE '^LLM_MODEL=.+' .env || setkv LLM_MODEL "qwen3.5:4b"
-  echo "   local model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2) on the host Ollama (Metal)"
+# The model is a cloud (or self-hosted) OpenAI-compatible endpoint set in .env via the
+# setup page (provider + one API key). There is no bundled local model runtime.
+CF=(-f compose.yml)
+if ! grep -qE '^LLM_BASE_URL=.+' .env || ! grep -qE '^LLM_MODEL=.+' .env; then
+  echo "   NOTE: no model connected yet. Open the dashboard and pick a provider + key in Set up." >&2
+else
+  echo "   model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2)  via  $(grep -E '^LLM_BASE_URL=' .env | cut -d= -f2)"
 fi
 
 # Agent Control base image (stock server from the upstream tag); our ac-server/Dockerfile
@@ -139,18 +119,6 @@ fi
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
 echo "   profiles: ${PROFILES[*]:-<none>}"
 docker compose "${CF[@]}" ${PROFILES[@]+"${PROFILES[@]}"} up -d --build
-
-# Download the chosen local model into Ollama (first time only; kept afterwards).
-if [ "$LOCAL_MODEL" = 1 ]; then
-  M=$(grep -E '^LLM_MODEL=' .env | cut -d= -f2)
-  echo ">> ensuring local model present: ${M}"
-  docker compose "${CF[@]}" --profile models exec -T ollama ollama pull "${M}" || \
-    echo "   (could not pull ${M} yet; the portal Quick start can retry)"
-elif [ "$HOST_OLLAMA" = 1 ] && command -v ollama >/dev/null 2>&1; then
-  M=$(grep -E '^LLM_MODEL=' .env | cut -d= -f2)
-  echo ">> ensuring ${M} on the host Ollama (Metal)..."
-  ollama pull "${M}" || echo "   (host pull failed; run:  ollama pull ${M})"
-fi
 
 # Wait briefly for the governor to answer, then print the access card.
 printf ">> waiting for services"

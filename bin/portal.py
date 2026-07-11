@@ -18,31 +18,8 @@ AGENT = "openclaw-agent:main"
 OC_SERVICE = "openclaw"                       # the single agent's compose service
 PORT = int(os.environ.get("PORTAL_PORT", "8891"))
 
-# Recommended local models, tagged by what hardware they suit. Default is qwen3.5:4b.
-RECMODELS = [
-    {"id": "qwen3.5:2b", "note": "~1.5 GB, fast, great on CPU", "tier": "cpu"},
-    {"id": "qwen3.5:4b", "note": "~3.4 GB, best all-round (default)", "tier": "any"},
-    {"id": "qwen3.5:9b", "note": "~5.5 GB, strongest, GPU recommended", "tier": "gpu"},
-]
-DEFAULT_MODEL = "qwen3.5:4b"
-
-_GPU = None
-def has_gpu():
-    global _GPU
-    if _GPU is None:
-        try:
-            _GPU = subprocess.run(["nvidia-smi", "-L"], capture_output=True, timeout=5).returncode == 0
-        except Exception:
-            _GPU = False
-    return _GPU
-
-def ollama_models():
-    try:
-        out = subprocess.run(["docker", "compose", "-f", CF, "--profile", "models", "exec", "-T",
-                              "ollama", "ollama", "list"], cwd=ROOT, capture_output=True, text=True, timeout=15).stdout
-        return [ln.split()[0] for ln in out.splitlines()[1:] if ln.strip()]
-    except Exception:
-        return []
+# The model is a cloud (or self-hosted) OpenAI-compatible endpoint the user connects
+# with one API key in the setup page. No bundled local model.
 
 # ---------- .env data layer ----------
 def envget(k, d=""):
@@ -179,11 +156,9 @@ def state():
     }
     webex = {"connected": bool(envget("WEBEX_REFRESH_TOKEN")), "client_id": bool(envget("WEBEX_CLIENT_ID")),
              "redirect": envget("WEBEX_REDIRECT_URI", "")}
-    base = envget("LLM_BASE_URL"); local = "ollama" in (base or "")
-    setup = {"local": local, "gpu": has_gpu(), "model": envget("LLM_MODEL"),
-             "configured": bool(envget("LLM_MODEL")) and bool(base),
-             "recommended": RECMODELS,
-             "downloaded": ollama_models() if (local and "ollama" in run) else []}
+    base = envget("LLM_BASE_URL"); local = ("11434" in (base or "")) or ("ollama" in (base or ""))
+    setup = {"local": local, "model": envget("LLM_MODEL"),
+             "configured": bool(envget("LLM_MODEL")) and bool(base)}
     controls = ac_controls()
     core_up = all(stack.get(s) for s in ("postgres", "server", "llm-proxy", OC_SERVICE))
     return {"stack": stack, "gov": gov, "access": access, "controls": controls,
@@ -224,7 +199,7 @@ def chat_agent(message):
                              cwd=ROOT, capture_output=True, text=True, timeout=600).stdout
         return clean_reply(out)
     except subprocess.TimeoutExpired:
-        return "(timed out. On CPU the model is slow, try qwen3.5:2b, or point at your host Ollama in Set up.)"
+        return "(timed out waiting for the model. Check your provider status, or try a faster model in Set up.)"
     except Exception as ex:
         return f"(error: {ex})"
 
@@ -301,23 +276,39 @@ def cred_test(item, d):
     try:
         if item == "model":
             base = (d.get("base") or "").strip()
+            model = (d.get("model") or "").strip()
             key = (d.get("key") or "").strip()
-            if not base or "ollama" in base:
-                return {"ok": None, "msg": "Bundled local model. It downloads and verifies at launch."}
-            probe = base.replace("host.docker.internal", "localhost").rstrip("/") + "/models"
-            req = urllib.request.Request(probe)
+            if not base:
+                return {"ok": False, "msg": "Pick a provider first."}
+            host_local = ("11434" in base) or ("ollama" in base)
+            if host_local:
+                return {"ok": None, "msg": "Local endpoint. It is verified at launch."}
+            # A tiny chat completion is the honest check: it proves the key AND the model
+            # actually work. Provider /models lists are inconsistent (Groq 403s some keys).
+            url = base.replace("host.docker.internal", "localhost").rstrip("/") + "/chat/completions"
+            payload = json.dumps({"model": model or "gpt-4o-mini",
+                                  "messages": [{"role": "user", "content": "ping"}],
+                                  "max_tokens": 1}).encode()
+            req = urllib.request.Request(url, data=payload, method="POST",
+                                         headers={"Content-Type": "application/json"})
             if key and key.lower() != "unused":
-                req.add_header("Authorization", "Bearer " + key)   # cloud providers auth /models
+                req.add_header("Authorization", "Bearer " + key)
             try:
-                with urllib.request.urlopen(req, timeout=6) as r:
-                    ids = [x.get("id") for x in json.loads(r.read().decode()).get("data", [])][:6]
-                    return {"ok": True, "msg": "Key works." + (" Models: " + ", ".join(ids) if ids else "")}
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    json.loads(r.read().decode())
+                    return {"ok": True, "msg": f"Key works. {model or 'the model'} replied."}
             except urllib.error.HTTPError as e:
                 if e.code in (401, 403):
-                    return {"ok": False, "msg": "The key was rejected (HTTP %d). Recheck it." % e.code}
-                return {"ok": False, "msg": f"Endpoint error (HTTP {e.code}) at {base}."}
+                    return {"ok": False, "msg": f"The key was rejected (HTTP {e.code}). Recheck it."}
+                if e.code == 404:
+                    return {"ok": False, "msg": f"Model '{model}' not found (HTTP 404). Check the model name."}
+                try:
+                    det = (json.loads(e.read().decode()).get("error") or {}).get("message", "")[:140]
+                except Exception:
+                    det = ""
+                return {"ok": False, "msg": f"Provider error (HTTP {e.code}). {det}".strip()}
             except Exception:
-                return {"ok": False, "msg": f"No response at {base}. Is the URL/key correct?"}
+                return {"ok": False, "msg": f"No response at {base}. Check the URL."}
         if item == "telegram":
             tok = (d.get("token") or "").strip()
             if not tok:
@@ -432,16 +423,8 @@ class H(BaseHTTPRequestHandler):
             s = d.get("splunk", {}); setpair(s.get("on"), "SPLUNK_HEC_URL", s.get("url", "")); setpair(s.get("on"), "SPLUNK_HEC_TOKEN", s.get("token", ""))
             start_build(["docker", "compose", "-f", CF, "up", "-d"])   # recreate only changed containers
             return self._send(200, json.dumps({"started": True}))
-        if u.path == "/api/quickstart":
-            # one click: point the agent at the bundled Ollama, pick a model, build + pull + start
-            m = (d.get("model") or ("qwen3.5:4b" if has_gpu() else "qwen3.5:2b")).strip()
-            setenv("LLM_BASE_URL", "http://ollama:11434/v1")
-            setenv("LLM_MODEL", m)
-            setenv("LLM_API_KEY", "unused")
-            start_build(["bash", "up.sh"])
-            return self._send(200, json.dumps({"started": True, "model": m}))
         if u.path == "/api/model":
-            setenv("LLM_BASE_URL", (d.get("base") or "http://ollama:11434/v1").strip())
+            setenv("LLM_BASE_URL", (d.get("base") or "").strip())
             setenv("LLM_MODEL", (d.get("model") or "").strip())
             setenv("LLM_API_KEY", (d.get("key") or "unused").strip())
             return self._send(200, json.dumps({"ok": True}))
