@@ -108,12 +108,26 @@ The open-source Agent Control ships **regex / list / json / sql** evaluators, th
 - **DefenseClaw** (local, open source). Run [DefenseClaw](https://github.com/cisco-ai-defense/defenseclaw) on your machine, set `DEFENSECLAW_TOKEN` in `.env`, and pick it as a rule's detector in the Governance tab. `up.sh` runs a small shim so the container can reach your local gateway.
 - **Cisco AI Defense** (cloud). A native Agent Control evaluator, `cisco.ai_defense`, needs a key.
 
-## Use your own model instead of the local one
+## Changing the model
 
-Set these in `.env` (see `.env.example`) and rerun `./up.sh`:
+The default is the bundled **`qwen3.5:4b`**, running locally in Ollama (no keys, ~3.4 GB, 256K context). To use something else, edit two keys in `.env`:
 
 ```bash
-LLM_BASE_URL=https://api.openai.com/v1     # or your vLLM / Ollama endpoint
+# .env  (defaults for the bundled local model)
+LLM_BASE_URL=http://ollama:11434/v1   # the bundled Ollama; leave as-is for local
+LLM_MODEL=qwen3.5:4b                   # any Ollama tag, or blank to auto-pick
+LLM_API_KEY=unused                     # a real key is only needed for external endpoints
+```
+
+Three ways to change it:
+
+1. **The setup page** (before launch): the Model card. Easiest.
+2. **Edit `.env`** then rerun `./up.sh`.
+3. Pick another local size from [ollama.com/library/qwen3.5](https://ollama.com/library/qwen3.5) (`qwen3.5:2b`, `qwen3.5:9b`, ...), or point at your own OpenAI-compatible endpoint:
+
+```bash
+# use your own endpoint instead of the bundled model
+LLM_BASE_URL=https://api.openai.com/v1     # or your vLLM / other endpoint
 LLM_MODEL=gpt-4o-mini
 LLM_API_KEY=sk-...
 ```

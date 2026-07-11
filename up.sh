@@ -107,7 +107,7 @@ if grep -qE '^LLM_BASE_URL=.*ollama' .env; then
   command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && { CF+=(-f compose.gpu.yml); GPU=1; }
   # auto-pick a model by hardware if the user has not chosen one (fresh clone = blank)
   if ! grep -qE '^LLM_MODEL=.+' .env; then
-    [ "$GPU" = 1 ] && setkv LLM_MODEL "qwen2.5:7b" || setkv LLM_MODEL "qwen2.5:1.5b"
+    setkv LLM_MODEL "qwen3.5:4b"
   fi
   echo "   local model: $(grep -E '^LLM_MODEL=' .env | cut -d= -f2) on $([ "$GPU" = 1 ] && echo GPU || echo CPU)"
 fi
