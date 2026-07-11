@@ -188,23 +188,51 @@ const server = http.createServer((req, res) => {
       }
     }
 
-    // Qwen3/3.5 keep emitting reasoning even when the runtime asks for none; on a small
-    // model that burns the whole output budget "thinking" and returns an EMPTY answer
-    // (stopReason "length", no text). The /no_think soft switch turns it off. We add it
-    // both as a leading system message and appended to the last user turn (the two places
-    // Qwen templates look). Gated to qwen models, so it is a no-op for any other model.
-    if (isChat && reqJson && /qwen/i.test(reqJson.model || "") && Array.isArray(reqJson.messages)) {
-      const msgs = reqJson.messages;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === "user") {
-          const c = msgs[i].content;
-          if (typeof c === "string") msgs[i] = { ...msgs[i], content: c + " /no_think" };
-          else if (Array.isArray(c)) msgs[i] = { ...msgs[i], content: [...c, { type: "text", text: " /no_think" }] };
-          break;
-        }
+    // Qwen3/3.5 on Ollama only disable reasoning via the NATIVE /api/chat "think" flag;
+    // the OpenAI /v1 endpoint ignores it, so the model spends its whole budget "thinking"
+    // and returns an EMPTY answer (stopReason "length"). For Qwen on an Ollama upstream we
+    // translate this one call to native /api/chat with think:false, then map the reply
+    // (content and any tool calls) back to OpenAI shape. Governance already ran above, so
+    // this only changes HOW the model is reached, not whether it is governed.
+    const isOllama = /ollama|:11434/.test(UPSTREAM);
+    if (isChat && reqJson && /qwen/i.test(reqJson.model || "") && isOllama) {
+      const nb = { model: reqJson.model, messages: reqJson.messages, think: false, stream: false, options: {} };
+      if (reqJson.max_tokens) nb.options.num_predict = reqJson.max_tokens;
+      if (typeof reqJson.temperature === "number") nb.options.temperature = reqJson.temperature;
+      if (reqJson.tools) nb.tools = reqJson.tools;
+      let nr;
+      try {
+        const up = await fetch(UPSTREAM.replace(/\/v1$/, "") + "/api/chat",
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nb) });
+        nr = await up.json();
+      } catch (e) {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `llm-proxy native upstream error: ${e.message}` })); return;
       }
-      reqJson.messages = [{ role: "system", content: "/no_think" }, ...msgs];
-      forwardBody = Buffer.from(JSON.stringify(reqJson));
+      const nm = nr.message || {};
+      const toolCalls = Array.isArray(nm.tool_calls) && nm.tool_calls.length
+        ? nm.tool_calls.map((t) => ({ id: "call_" + hex(8), type: "function",
+            function: { name: t.function?.name || "",
+              arguments: typeof t.function?.arguments === "string" ? t.function.arguments : JSON.stringify(t.function?.arguments || {}) } }))
+        : undefined;
+      const finish = toolCalls ? "tool_calls" : "stop";
+      const msg = { role: "assistant", content: nm.content || "" };
+      if (toolCalls) msg.tool_calls = toolCalls;
+      if (reqJson.stream) {
+        const base = { id: "chatcmpl-gov-" + hex(8), object: "chat.completion.chunk", created: 0, model: reqJson.model };
+        const delta = toolCalls ? { ...msg, tool_calls: toolCalls.map((t, i) => ({ index: i, ...t })) } : msg;
+        const d1 = { ...base, choices: [{ index: 0, delta, finish_reason: null }] };
+        const d2 = { ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }] };
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end(`data: ${JSON.stringify(d1)}\n\ndata: ${JSON.stringify(d2)}\n\ndata: [DONE]\n\n`);
+      } else {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ id: "chatcmpl-gov-" + hex(8), object: "chat.completion", created: 0, model: reqJson.model,
+          choices: [{ index: 0, message: msg, finish_reason: finish }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } }));
+      }
+      console.log(`${new Date().toISOString()} LLM qwen->native think:false trace=- content=${(nm.content || "").length}b tools=${toolCalls ? toolCalls.length : 0}`);
+      return;
     }
 
     // forward to the real model
