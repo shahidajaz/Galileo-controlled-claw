@@ -209,10 +209,6 @@ const server = http.createServer((req, res) => {
       if (reqJson.max_tokens) nb.options.num_predict = reqJson.max_tokens;
       if (typeof reqJson.temperature === "number") nb.options.temperature = reqJson.temperature;
       if (reqJson.tools) nb.tools = reqJson.tools;
-      console.log("qwen->native DEBUG " + JSON.stringify({
-        num_predict: nb.options.num_predict, max_tokens: reqJson.max_tokens, stream: !!reqJson.stream,
-        msgs: nb.messages.map((m) => ({ role: m.role, len: (m.content || "").length, head: (m.content || "").slice(0, 90) })),
-      }));
       let nr;
       try {
         const up = await fetch(UPSTREAM.replace(/\/v1$/, "") + "/api/chat",
