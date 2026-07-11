@@ -138,7 +138,7 @@ fi
 
 echo ">> building + starting (first run pulls + compiles OpenClaw from source, several minutes)"
 echo "   profiles: ${PROFILES[*]:-<none>}"
-docker compose "${CF[@]}" "${PROFILES[@]}" up -d --build
+docker compose "${CF[@]}" ${PROFILES[@]+"${PROFILES[@]}"} up -d --build
 
 # Download the chosen local model into Ollama (first time only; kept afterwards).
 if [ "$LOCAL_MODEL" = 1 ]; then
