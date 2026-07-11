@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 -->
 
-# Governed OpenClaw
+# Galileo controlled Claw
 
 **A private AI agent you run on your own machine, with a governor in front of it that checks every action before it happens.** Clone it, run one command, and you have a working, governed agent, plus a hands-on testbed for the real tools it wires together: [Agent Control](https://github.com/agentcontrol/agent-control), [DefenseClaw](https://github.com/cisco-ai-defense/defenseclaw), [Galileo](https://galileo.ai/), and Cisco AI Defense.
 

@@ -17,7 +17,9 @@ case "${1:---stop}" in
     done
     echo "Reset. State cleared; the model is kept." ;;
   --wipe|--wipe-all|-v)
-    "${DOWN[@]}" --volumes; echo "Wiped everything, including the downloaded model." ;;
+    "${DOWN[@]}" --volumes --rmi local
+    docker image rm -f "${AC_BASE_IMAGE:-openclaw-ac-base:8.2.0}" >/dev/null 2>&1 || true
+    echo "Wiped everything: containers, volumes, the model, and this project's images." ;;
   *)
     echo "usage: down.sh [--stop | --reset | --wipe]"; exit 1 ;;
 esac

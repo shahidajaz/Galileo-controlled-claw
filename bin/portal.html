@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed OpenClaw</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Galileo controlled Claw</title>
 <style>
 :root{--bg:#0e1216;--panel:#171d24;--panel2:#1c232b;--line:#232b34;--line2:#2c3742;--ink:#dbe3ee;
 --hd:#9aa7b8;--mu:#6b7787;--mu2:#586474;--ac:#7f9cf5;--acbg:#1b2440;--g:#2fbf71;--am:#d9a13b;--rd:#ef7a72;
@@ -97,7 +97,7 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style></head><body>
 <div class="app">
-  <div class="side"><div class="brand">Governed OpenClaw</div>
+  <div class="side"><div class="brand">Galileo controlled Claw</div>
     <div class="nav" id="nav"></div></div>
   <div class="wrap" id="main"></div>
 </div>
@@ -243,7 +243,7 @@ function startStep(st){
   const s=st.setup||{}; const gpu=s.gpu; const own=SETUP.endpoint==='own';
   const opts=(s.recommended||[]).map(m=>{const def=(m.id==='qwen3.5:4b');
     return `<option value="${m.id}" ${def?'selected':''}>${m.id} · ${m.note}</option>`;}).join('');
-  const seg=`<div class="seg"><button class="${own?'':'on'}" onclick="SETUP.endpoint='bundled';render()">Bundled local model</button><button class="${own?'on':''}" onclick="SETUP.endpoint='own';render()">My own endpoint</button></div>`;
+  const seg=`<div class="seg"><button class="${own?'':'on'}" onclick="SETUP.endpoint='bundled';render()">Bundled local model</button><button class="${own?'on':''}" onclick="SETUP.endpoint='own';render()">My own model (LLM)</button></div>`;
   const bundled=`<label style="font-size:13px;color:var(--hd)">Model</label>
     <select id="su_model" style="margin:5px 0 4px">${opts}</select>
     <div class="cx-help" style="margin-bottom:10px">No keys. Runs on this machine${gpu?' <b style="color:var(--g)">with your GPU</b>':' on the CPU'}. Downloads on first launch.</div>`;
@@ -268,7 +268,10 @@ function buildStages(){
   if(/ensuring local model|local model:|pulling/i.test(L)) stage=2;
   if(/waiting for services|>> waiting/i.test(L)) stage=3;
   if(SETUP.build.phase==='checking') stage=4;
-  if(stage===2){const m=[...L.matchAll(/(\d{1,3})\s*%/g)];if(m.length)pct=Math.min(100,parseInt(m[m.length-1][1]));}
+  if(stage===2){const m=[...L.matchAll(/(\d{1,3})\s*%/g)];
+    if(m.length){const p=Math.min(100,parseInt(m[m.length-1][1]));
+      // pull reports each layer's own %, so raw values bounce; only ever move forward
+      SETUP.build.pct=Math.max(SETUP.build.pct||0,p); pct=SETUP.build.pct;}}
   return {stage,pct};
 }
 function buildingCard(){
